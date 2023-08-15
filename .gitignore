@@ -1,0 +1,9 @@
+/.vs/
+/x64/
+/Debug/
+/loxpiler/x64/
+/loxpiler/Debug/
+/loxpiler/loxpiler.vcxproj
+/loxpiler/loxpiler.vcxproj.filters
+/loxpiler/loxpiler.vcxproj.user
+/loxpiler.sln.DotSettings.user
