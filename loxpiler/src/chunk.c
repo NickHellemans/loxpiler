@@ -6,6 +6,7 @@ void init_chunk(Chunk* chunk) {
 	chunk->size = 0;
 	chunk->capacity = 0;
 	chunk->code = NULL;
+	init_value_array(&chunk->constants);
 }
 
 void write_chunk(Chunk* chunk, uint8_t byte) {
@@ -19,9 +20,16 @@ void write_chunk(Chunk* chunk, uint8_t byte) {
 	chunk->size++;
 }
 
+//returns index where constant was added so we can locate it later
+int add_constant(Chunk* chunk, Value value) {
+	write_value_array(&chunk->constants, value);
+	return chunk->constants.size - 1;
+}
+
 void free_chunk(Chunk* chunk) {
 	//Deallocate memory
 	FREE_ARRAY(uint8_t, chunk->code, chunk->capacity);
+	free_value_array(&chunk->constants);
 	//Reset to empty state
 	init_chunk(chunk);
 }
