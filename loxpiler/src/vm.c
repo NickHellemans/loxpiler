@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "common.h"
 #include "debug.h"
+#include "compiler.h"
 
 //Better to pass around VM with a pointer, but we use 1 global VM to make code a bit lighter
 //We only need one anyways
@@ -40,9 +41,9 @@ static InterpretResult run(void) {
 	//And can use a semicolon at end
 #define BINARY_OP(op) \
     do { \
-      double b = pop(); \
-      double a = pop(); \
-      push(a op b); \
+      double b = pop_stack(); \
+      double a = pop_stack(); \
+      push_stack(a op b); \
     } while (false)
 
 	for(;;) {
@@ -92,9 +93,7 @@ static InterpretResult run(void) {
 }
 
 
-InterpretResult interpret(Chunk* chunk) {
-	vm.chunk = chunk;
-	//point at first instruction of code
-	vm.ip = vm.chunk->code;
-	return run();
+InterpretResult interpret(const char* source) {
+	compile(source);
+	return INTERPRET_OK;
 }

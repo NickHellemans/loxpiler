@@ -28,6 +28,6 @@ typedef enum {
 
 void init_vm(void);
 void free_vm(void);
-InterpretResult interpret(Chunk* chunk);
+InterpretResult interpret(const char* source);
 void push_stack(Value value);
 Value pop_stack(void);
