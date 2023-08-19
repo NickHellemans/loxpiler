@@ -17,6 +17,8 @@ typedef struct {
 	//Same reason we store ip as a pointer
 	//Points at first empty element in stack
 	Value* stackTop;
+	//All allocated objects to track
+	Obj* objects;
 } VM;
 
 typedef enum {
@@ -25,6 +27,7 @@ typedef enum {
 	INTERPRET_RUNTIME_ERROR
 } InterpretResult;
 
+extern VM vm;
 
 void init_vm(void);
 void free_vm(void);

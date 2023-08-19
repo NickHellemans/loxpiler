@@ -2,6 +2,9 @@
 
 #include "common.h"
 
+#define ALLOCATE(type, count) \
+    (type*)reallocate(NULL, 0, sizeof(type) * (count))
+
 #define GROW_CAPACITY(capacity) \
 	((capacity) < 8 ? 8 : (capacity) *2)
 
@@ -10,7 +13,9 @@
 		sizeof(type) * (newCap))
 
 #define FREE_ARRAY(type, pointer, oldCap) \
-	reallocate(pointer, sizeof(type) * (oldCap), 0)	
+	reallocate(pointer, sizeof(type) * (oldCap), 0)
+
+#define FREE(type, pointer) reallocate(pointer, sizeof(type), 0)
 
 //Size args control which operation to perform
 //oldSize 		newSize 					Operation
@@ -20,3 +25,5 @@
 //Non‑zero 	Smaller than oldSize 	Shrink existing allocation.
 //Non‑zero 	Larger than oldSize 	Grow existing allocation.
 void* reallocate(void* ptr, size_t oldCap, size_t newCap);
+
+void free_objects(void);
