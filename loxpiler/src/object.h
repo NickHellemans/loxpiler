@@ -22,6 +22,8 @@ struct ObjString {
 	Obj obj;
 	int length;
 	char* chars;
+	//Calc hash upfront , strings are immutable, and store
+	uint32_t hash;
 };
 
 void print_object(Value value);
