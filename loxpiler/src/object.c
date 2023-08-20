@@ -23,6 +23,9 @@ static ObjString* allocate_string(char* chars, int length, uint32_t hash) {
 	string->length = length;
 	string->chars = chars;
 	string->hash = hash;
+	//Store string in interned strings table (more like a hashset)
+	//Only care about keys, so val = nil
+	table_set(&vm.strings, string, NIL_VAL);
 	return string;
 }
 
@@ -46,11 +49,26 @@ void print_object(Value value) {
 
 ObjString* take_string(char* chars, int length) {
 	uint32_t hash = hash_string(chars, length);
+	//Look if string already exists in interned strings table
+	//if it does, just return that string instead of allocating a new one
+	ObjString* interned = table_find_string(&vm.strings, chars, length, hash);
+	if (interned != NULL) {
+		//Need to free memory of passed in string
+		//Ownership is being passed to this func
+		FREE_ARRAY(char, chars, length + 1);
+		return interned;
+	}
 	return allocate_string(chars, length, hash);
 }
 
 ObjString* copy_string(const char* chars, int length) {
 	uint32_t hash = hash_string(chars, length);
+	//Look if string already exists in interned strings table
+	//if it does, just return that string instead of allocating a new one
+	ObjString* interned = table_find_string(&vm.strings, chars, length, hash);
+	if (interned != NULL)
+		return interned;
+
 	char* heapChars = ALLOCATE(char, length + 1);
 	memcpy(heapChars, chars, length);
 	heapChars[length] = '\0';

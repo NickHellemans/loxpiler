@@ -41,6 +41,7 @@ Entry* find_entry(Entry* entries, int cap, ObjString* key) {
 		}
 		//Found key
 		//We can compare pointers because string interning
+		//String compare is slow (loop over every char)
 		else if (entry->key == key)
 			return entry;
 		
@@ -130,5 +131,23 @@ void table_add_all(Table* from, Table* to) {
 		Entry* entry = &from->elements[i];
 		if (entry->key != NULL)
 			table_set(to, entry->key, entry->value);
+	}
+}
+
+ObjString* table_find_string(Table* table, const char* chars, int length, uint32_t hash) {
+	if (table->size == 0)
+		return NULL;
+	uint32_t index = hash % table->cap;
+	for(;;) {
+		Entry* entry = &table->elements[index];
+		if(entry->key == NULL) {
+			if (IS_NIL(entry->value))
+				//Stop if non empty, non tombstone entry
+				return NULL;
+		} else if(entry->key->length == length && entry->key->hash == hash && memcmp(entry->key->chars, chars, length) {
+			//Found it
+			return entry->key;
+		}
+		index = (index + 1 ) % table->cap;
 	}
 }

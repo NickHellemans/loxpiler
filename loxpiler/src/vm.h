@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chunk.h"
+#include "table.h"
 #include "value.h"
 
 #define STACK_MAX 256
@@ -17,8 +18,11 @@ typedef struct {
 	//Same reason we store ip as a pointer
 	//Points at first empty element in stack
 	Value* stackTop;
+	//Interned strings
+	Table strings;
 	//All allocated objects to track
 	Obj* objects;
+
 } VM;
 
 typedef enum {
