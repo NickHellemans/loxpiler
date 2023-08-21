@@ -129,19 +129,23 @@ static InterpretResult run(void) {
 			case OP_TRUE: push_stack(BOOL_VAL(true)); break;
 			case OP_FALSE: push_stack(BOOL_VAL(false)); break;
 			case OP_POP: pop_stack(); break;
-		case OP_GET_GLOBAL: {
-			ObjString* name = READ_STRING();
-			Value value;
-			if(!table_get(&vm.globals, name, &value)) {
-				runtime_error("Undefined variable '%s'.", name->chars);
-				return INTERPRET_RUNTIME_ERROR;
+			case OP_GET_GLOBAL: {
+				ObjString* name = READ_STRING();
+				Value value;
+				printf("Getting %s out of globals \n", name->chars);
+				printf("Size of globals: %d\n", vm.globals.size);
+				if(!table_get(&vm.globals, name, &value)) {
+					runtime_error("Undefined variable '%s'.", name->chars);
+					return INTERPRET_RUNTIME_ERROR;
+				}
+				push_stack(value);
+				break;
 			}
-			push_stack(value);
-			break;
-		}
 			case OP_DEFINE_GLOBAL: {
 				ObjString* name = READ_STRING();
 				table_set(&vm.globals, name, peek(0));
+				printf("Added %s to table\n", name->chars);
+				printf("Size of globals: %d\n", vm.globals.size);
 				pop_stack();
 				break;
 			}

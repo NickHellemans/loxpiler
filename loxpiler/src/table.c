@@ -28,16 +28,17 @@ Entry* find_entry(Entry* entries, int cap, ObjString* key) {
 	for(;;) {
 		Entry* entry = &entries[index];
 		if(entry->key == NULL) {
-			if (IS_NIL(entry->value))
+			if (IS_NIL(entry->value)) {
+				
 				//Empty entry
 				//If tombstone is not NULL it means we passed a tombstone
 				//so we return that location instead of current entry to reuse it to avoid wasting space
 				//else return entry
 				return tombstone != NULL ? tombstone : entry;
-			else
+			} else {
 				//Found tombstone, update var and keep going with next location
-				if (tombstone == NULL)
-					tombstone = entry;
+				if (tombstone == NULL) tombstone = entry;
+			}
 		}
 		//Found key
 		//We can compare pointers because string interning
@@ -92,7 +93,7 @@ bool table_get(Table* table, ObjString* key, Value* value) {
 
 bool table_set(Table* table, ObjString* key, Value value) {
 
-	if(table->size >= table->cap * TABLE_MAX_LOAD) {
+	if(table->size + 1 > table->cap * TABLE_MAX_LOAD) {
 		int capacity = GROW_CAPACITY(table->cap);
 		adjust_capacity(table, capacity);
 	}
@@ -107,6 +108,7 @@ bool table_set(Table* table, ObjString* key, Value value) {
 
 	entry->key = key;
 	entry->value = value;
+
 	return isNewKey;
 }
 
@@ -135,16 +137,16 @@ void table_add_all(Table* from, Table* to) {
 }
 
 ObjString* table_find_string(Table* table, const char* chars, int length, uint32_t hash) {
-	if (table->size == 0)
-		return NULL;
+	if (table->size == 0) return NULL;
+
 	uint32_t index = hash % table->cap;
 	for(;;) {
 		Entry* entry = &table->elements[index];
 		if(entry->key == NULL) {
-			if (IS_NIL(entry->value))
-				//Stop if non empty, non tombstone entry
-				return NULL;
-		} else if(entry->key->length == length && entry->key->hash == hash && memcmp(entry->key->chars, chars, length)) {
+			//Stop if non empty, non tombstone entry
+			if (IS_NIL(entry->value)) return NULL;
+
+		} else if(entry->key->length == length && entry->key->hash == hash && memcmp(entry->key->chars, chars, length) == 0) {
 			//Found it
 			return entry->key;
 		}
