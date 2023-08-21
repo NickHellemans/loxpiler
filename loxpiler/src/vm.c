@@ -113,8 +113,7 @@ static InterpretResult run(void) {
 		//Dispatch bytecode instructions = implement instruction opcode
 		switch (instruction = READ_BYTE()) {
 			case OP_RETURN: {
-				print_value(pop_stack());
-				printf("\n");
+				//Exit interpreter
 				return INTERPRET_OK;
 			}
 
@@ -126,6 +125,7 @@ static InterpretResult run(void) {
 			case OP_NIL: push_stack(NIL_VAL); break;
 			case OP_TRUE: push_stack(BOOL_VAL(true)); break;
 			case OP_FALSE: push_stack(BOOL_VAL(false)); break;
+			case OP_POP: pop_stack(); break;
 			case OP_EQUAL: {
 				Value b = pop_stack();
 				Value a = pop_stack();
@@ -164,6 +164,12 @@ static InterpretResult run(void) {
 				}
 				//Get back top, unwrap value, negate it, wrap it and push negated version back
 				push_stack(NUMBER_VAL(-AS_NUMBER(pop_stack())));
+				break;
+			}
+
+			case OP_PRINT: {
+				print_value(pop_stack());
+				printf("\n");
 				break;
 			}
 		}

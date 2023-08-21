@@ -12,6 +12,9 @@
 #include "debug.h"
 #endif
 
+static void statement(void);
+static void declaration(void);
+
 typedef struct {
 	Token curr;
 	Token prev;
@@ -106,6 +109,18 @@ static void consume(TokenType type, const char* message) {
 	error_at_current(message);
 }
 
+static bool check_type(TokenType type) {
+	return parser.curr.type == type;
+}
+
+static bool match(TokenType type) {
+	if(!check_type(type)) {
+		return false;
+	}
+	advance();
+	return true;
+}
+
 static void emit_byte(uint8_t byte) {
 	write_chunk(current_chunk(), byte, parser.prev.line);
 }
@@ -163,6 +178,63 @@ static void parse_precedence(Precedence precedence) {
 
 static void expression(void) {
 	parse_precedence(PREC_ASSIGNMENT);
+}
+
+static void expression_statement(void) {
+	expression();
+	consume(TOKEN_SEMICOLON, "Expect ';' after expression.");
+	//Make sure to remove it from stack
+	//Statements have a net-0 effect on state of stack
+	//= Evaluate expression and discard result
+	emit_byte(OP_POP);
+}
+
+static void print_statement(void) {
+	expression();
+	consume(TOKEN_SEMICOLON, "Expect ';' after value");
+	emit_byte(OP_PRINT);
+}
+
+static void synchronize(void) {
+	parser.panicMode = false;
+
+	while(parser.curr.type != EOF) {
+		//Find the end of a statement and exit panic mode
+		if(parser.prev.type == TOKEN_SEMICOLON) {
+			return;
+		}
+		//Find beginning of a statement end exit
+		switch (parser.curr.type) {
+		case TOKEN_CLASS:
+		case TOKEN_FUN:
+		case TOKEN_VAR:
+		case TOKEN_FOR:
+		case TOKEN_IF:
+		case TOKEN_WHILE:
+		case TOKEN_PRINT:
+		case TOKEN_RETURN:
+			return;
+
+		default:
+			; // Do nothing.
+		}
+		//No end or beginning found -> check next token
+		advance();
+	}
+}
+
+static void declaration(void) {
+	statement();
+	if (parser.panicMode)
+		synchronize();
+}
+
+static void statement(void) {
+	if(match(TOKEN_PRINT)) {
+		print_statement();
+	} else {
+		expression_statement();
+	}
 }
 
 static void number(void) {
@@ -285,8 +357,11 @@ bool compile(const char* source, Chunk* chunk) {
 	parser.panicMode = false;
 
 	advance();
-	expression();
-	consume(TOKEN_EOF, "Expect end of expression.");
+
+	while(!match(TOKEN_EOF)) {
+		declaration();
+	}
+
 	end_compiler();
 	return !parser.hadError;
 }

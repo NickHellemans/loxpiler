@@ -144,7 +144,7 @@ ObjString* table_find_string(Table* table, const char* chars, int length, uint32
 			if (IS_NIL(entry->value))
 				//Stop if non empty, non tombstone entry
 				return NULL;
-		} else if(entry->key->length == length && entry->key->hash == hash && memcmp(entry->key->chars, chars, length) {
+		} else if(entry->key->length == length && entry->key->hash == hash && memcmp(entry->key->chars, chars, length)) {
 			//Found it
 			return entry->key;
 		}
