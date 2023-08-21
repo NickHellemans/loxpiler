@@ -18,6 +18,8 @@ typedef struct {
 	//Same reason we store ip as a pointer
 	//Points at first empty element in stack
 	Value* stackTop;
+	//Global env
+	Table globals;
 	//Interned strings
 	Table strings;
 	//All allocated objects to track

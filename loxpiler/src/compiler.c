@@ -175,9 +175,38 @@ static void parse_precedence(Precedence precedence) {
 	}
 }
 
+static uint8_t identifier_constant(Token* name) {
+	//Global vars are looked up by name at runtime
+	//Whole string is too big to fit into bytecode
+	//Store string in constant table and instruction refers to the name by index in constant table
+	return make_constant(OBJ_VAL(copy_string(name->start, name->length)));
+}
+
+static uint8_t parse_variable(const char* errorMsg) {
+	consume(TOKEN_IDENTIFIER, errorMsg);
+	return identifier_constant(&parser.prev);
+}
+
+static void define_variable(uint8_t global) {
+	emit_bytes(OP_DEFINE_GLOBAL, global);
+}
 
 static void expression(void) {
 	parse_precedence(PREC_ASSIGNMENT);
+}
+
+static void var_declaration(void) {
+	uint8_t global = parse_variable("Expect variable name.");
+
+	if(match(TOKEN_EQUAL)) {
+		expression();
+	}else {
+		//Init to nil if no expression
+		//var myVar;
+		emit_byte(OP_NIL);
+	}
+	consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+	define_variable(global);
 }
 
 static void expression_statement(void) {
@@ -224,7 +253,12 @@ static void synchronize(void) {
 }
 
 static void declaration(void) {
-	statement();
+	if(match(TOKEN_VAR)) {
+		var_declaration();
+	}else {
+		statement();
+	}
+
 	if (parser.panicMode)
 		synchronize();
 }
