@@ -132,8 +132,6 @@ static InterpretResult run(void) {
 			case OP_GET_GLOBAL: {
 				ObjString* name = READ_STRING();
 				Value value;
-				printf("Getting %s out of globals \n", name->chars);
-				printf("Size of globals: %d\n", vm.globals.size);
 				if(!table_get(&vm.globals, name, &value)) {
 					runtime_error("Undefined variable '%s'.", name->chars);
 					return INTERPRET_RUNTIME_ERROR;
@@ -144,9 +142,20 @@ static InterpretResult run(void) {
 			case OP_DEFINE_GLOBAL: {
 				ObjString* name = READ_STRING();
 				table_set(&vm.globals, name, peek(0));
-				printf("Added %s to table\n", name->chars);
-				printf("Size of globals: %d\n", vm.globals.size);
 				pop_stack();
+				break;
+			}
+			case OP_SET_GLOBAL: {
+				ObjString* name = READ_STRING();
+				//If table_set returns true, it means we defined a new entry
+				//And did not reassign an existing var
+				//So we delete it again and return an error
+				if(table_set(&vm.globals, name, peek(0))) {
+					table_delete(&vm.globals, name);
+					runtime_error("Undefined variable '%s'.", name->chars);
+					return INTERPRET_RUNTIME_ERROR;
+				}
+				break;
 				break;
 			}
 			case OP_EQUAL: {

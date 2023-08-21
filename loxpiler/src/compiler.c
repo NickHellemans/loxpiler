@@ -36,7 +36,7 @@ typedef enum {
 	PREC_PRIMARY
 } Precedence;
 
-typedef void (*ParseFn)(void);
+typedef void (*ParseFn)(bool canAssign);
 
 typedef struct {
 	ParseFn prefix;
@@ -166,12 +166,21 @@ static void parse_precedence(Precedence precedence) {
 		return;
 	}
 
-	prefixRule();
+	//Only consume assignment ( = token ) if it is in context of a low-precedence expression
+	bool canAssign = precedence <= PREC_ASSIGNMENT;
+	prefixRule(canAssign);
 
 	while(precedence <= get_rule(parser.curr.type)->precedence){
 		advance();
 		ParseFn infixRule = get_rule(parser.prev.type)->infix;
-		infixRule();
+		infixRule(canAssign);
+	}
+
+	//If = didn't get consumed and we could assign it means we have wrong
+	//assignment target
+	//So we consume it and return error
+	if(canAssign && match(TOKEN_EQUAL)) {
+		error("Invalid assignment target");
 	}
 }
 
@@ -271,31 +280,37 @@ static void statement(void) {
 	}
 }
 
-static void number(void) {
+static void number(bool canAssign) {
 	double value = strtod(parser.prev.start, NULL);
 	emit_constant(NUMBER_VAL(value));
 }
 
-static void string(void) {
+static void string(bool canAssign) {
 	emit_constant(OBJ_VAL(copy_string(parser.prev.start + 1,
 		parser.prev.length - 2)));
 }
 
-static void named_variable(Token name) {
+static void named_variable(Token name, bool canAssign) {
 	uint8_t arg = identifier_constant(&name);
-	emit_bytes(OP_GET_GLOBAL, arg);
+
+	if(canAssign && match(TOKEN_EQUAL)) {
+		expression();
+		emit_bytes(OP_SET_GLOBAL, arg);
+	} else {
+		emit_bytes(OP_GET_GLOBAL, arg);
+	}
 }
 
-static void variable(void) {
-	named_variable(parser.prev);
+static void variable(bool canAssign) {
+	named_variable(parser.prev, canAssign);
 }
 
-static void grouping(void) {
+static void grouping(bool canAssign) {
 	expression();
 	consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression");
 }
 
-static void unary(void) {
+static void unary(bool canAssign) {
 	TokenType operatorType = parser.prev.type;
 
 	//Compile the operand
@@ -310,7 +325,7 @@ static void unary(void) {
 
 }
 
-static void binary(void) {
+static void binary(bool canAssign) {
 	//Left hand operand has been compiled + infix operator consumed
 	//Value will end up on stack
 	//Binary will compile right hand of operand and emits the right bytecode instruction for the operator
@@ -337,7 +352,7 @@ static void binary(void) {
 	}
 }
 
-static void literal(void) {
+static void literal(bool canAssign) {
 	switch (parser.prev.type) {
 		case TOKEN_FALSE: emit_byte(OP_FALSE); break;
 		case TOKEN_NIL: emit_byte(OP_NIL); break;
