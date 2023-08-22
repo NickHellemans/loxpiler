@@ -49,12 +49,18 @@ typedef struct {
 
 typedef struct {
 	Token name;
+	//Scope depth of the block where the local variable was declared
 	int depth;
 } Local;
 
 typedef struct {
+	//Array of local vars that are currently in scope during each point of compilation
+	//Instruction operand = single byte -> Max locals = uint8 max (256 indexes available)
 	Local locals[UINT8_COUNT];
+	//How many locals are in scope atm / how many array slots are in use
 	int localCount;
+	//Number of blocks surrounding the current bit of code we are compiling
+	//0 - global / 1 - 1 block nested / ...
 	int scopeDepth;
 } Compiler;
 
@@ -185,9 +191,14 @@ static void begin_scope(void) {
 
 static void end_scope(void) {
 	current->scopeDepth--;
-	//Pop local scoped vars off 
+	//Pop local scoped vars off by reducing array size until we entered a new scope or no locals left
+	//Loop backwards
 	while(current->localCount > 0 && current->locals[current->localCount - 1].depth >
 		current->scopeDepth){
+
+		//Local vars occupy spot on stack
+		//When it goes out of scope it is no longer needed
+		//Pop it off
 		emit_byte(OP_POP);
 		current->localCount--;
 	}
@@ -232,38 +243,63 @@ static bool identifiers_equal(Token* a, Token* b) {
 }
 
 static int resolve_local(Compiler* compiler, Token* name) {
+	//Try to find a local var with parsed identifier name
+	//Walk list of locals currently in scope backwards (last declared vars) to ensure inner local vars shadow outer declared locals with the same name in surrounding scopes
+	//Compare local with identifier
+	//If match --> return stack slot index
+	//Locals array in compiler has exact same layout as the VM's stack at runtime
+	//Variable index in locals array == stack slot 
 	for(int i = compiler->localCount - 1; i >= 0; i--) {
 		Local* local = &compiler->locals[i];
-		if (identifiers_equal(name, &local->name))
-			return i;
-	}
+		if (identifiers_equal(name, &local->name)) {
 
+			//Check local scope depth to see if local var is fully initialized and not pointing to itself
+			if (local->depth == -1) {
+				error("Can't read local variable in its own initializer.");
+			}
+			return i;
+		}
+	}
+	//Not found -> assume global var
 	return -1;
 }
 
 static void add_local(Token name) {
+	//If max amount of locals -> error and return
 	if(current->localCount == UINT8_COUNT) {
 		error("Too many local variables in function.");
 		return;
 	}
 
+	//Initialize the next available Local in the locals array of vars
+	//Store variable name (identifier) and depth
 	Local* local = &current->locals[current->localCount++];
 	local->name = name;
+	//Edge case when var declaration points back to itself
+	//Indicate uninitialized state (Name declared but no value initialized)
+	//Then we compile initializer, mark var as ready to use (initialized) if it does not point back to itself with an identifier in the expression (ex. var a = a;)
 	local->depth = -1;
 }
 
 static void declare_variable(void) {
-	//Global scope
+	//Global scope -> exit
 	if (current->scopeDepth == 0)
 		return;
 
+	//Consumed identifier
 	Token* name = &parser.prev;
 
-	for(int i = current->localCount - 1; i >= 0; i++) {
+	//Check for same named declared vars in SAME EXACT scope
+	//Loop over the locals array backwards (current scope is always at the back of array)
+	//Look for var with same name and report any errors if one in same scope
+	for(int i = current->localCount - 1; i >= 0; i--) {
 		Local* local = &current->locals[i];
+		//Break out of loop if local->depth is different than scopeDepth -> entered different scope
+		//And local var is fully initialized
 		if(local->depth != -1 && local->depth < current->scopeDepth) {
 			break;
 		}
+
 		if(identifiers_equal(name, &local->name)) {
 			error("Already a variable with this name in this scope.");
 		}
@@ -285,6 +321,7 @@ static uint8_t parse_variable(const char* errorMsg) {
 }
 
 static void mark_initialized(void) {
+	//Mark var as initialized by setting it's depth value to the current scopeDepth
 	current->locals[current->localCount - 1].depth =
 		current->scopeDepth;
 }
@@ -297,6 +334,7 @@ static void define_variable(uint8_t global) {
 		mark_initialized();
 		return;
 	}
+
 	emit_bytes(OP_DEFINE_GLOBAL, global);
 }
 
@@ -403,23 +441,29 @@ static void string(bool canAssign) {
 }
 
 static void named_variable(Token name, bool canAssign) {
-
+	//Check what type of var we need get/set instructions for: global or local
 	uint8_t getOp, setOp;
+	//Look for local var first
 	int arg = resolve_local(current, &name);
+	//Local var
 	if (arg != -1) {
 		getOp = OP_GET_LOCAL;
 		setOp = OP_SET_LOCAL;
 	}
+	//Global var
 	else {
 		arg = identifier_constant(&name);
 		getOp = OP_GET_GLOBAL;
 		setOp = OP_SET_GLOBAL;
 	}
 
-	if(canAssign && match(TOKEN_EQUAL)) {
+	//Assign expr to var
+	if (canAssign && match(TOKEN_EQUAL)) {
 		expression();
 		emit_bytes(setOp, (uint8_t)arg);
-	} else {
+	}
+	//Read var
+	else {
 		emit_bytes(getOp, (uint8_t)arg);
 	}
 }

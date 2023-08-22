@@ -130,12 +130,19 @@ static InterpretResult run(void) {
 			case OP_FALSE: push_stack(BOOL_VAL(false)); break;
 			case OP_POP: pop_stack(); break;
 			case OP_GET_LOCAL: {
+				//Get stack slot index from local var from instruction operand 
 				uint8_t slot = READ_BYTE();
+				//Instructions work with data on top of stack
+				//Push value on top of stack (copy)
 				push_stack(vm.stack[slot]);
 				break;
 			}
 			case OP_SET_LOCAL: {
+				//Get stack slot index from local var from instruction operand 
 				uint8_t slot = READ_BYTE();
+				//Set that var to last value pushed on stack
+				//Don't pop of stack
+				//Value of assignment expression = the assigned value
 				vm.stack[slot] = peek(0);
 				break;
 			}
@@ -165,7 +172,6 @@ static InterpretResult run(void) {
 					runtime_error("Undefined variable '%s'.", name->chars);
 					return INTERPRET_RUNTIME_ERROR;
 				}
-				break;
 				break;
 			}
 			case OP_EQUAL: {
