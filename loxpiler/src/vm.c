@@ -85,6 +85,9 @@ static void concatenate(void) {
 static InterpretResult run(void) {
 #define READ_BYTE()(*vm.ip++)
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
+	//Yank next 2 bytes out of code and build a 16bit integer
+#define READ_SHORT() \
+    (vm.ip += 2, (uint16_t)((vm.ip[-2] << 8) | vm.ip[-1]))
 #define READ_STRING() AS_STRING(READ_CONSTANT())
 	//Do while is a trick to make sure every statement is in same scope
 	//And can use a semicolon at end
@@ -220,13 +223,30 @@ static InterpretResult run(void) {
 				printf("\n");
 				break;
 			}
+			case OP_JUMP: {
+				//Save offset in 16bit int (saved in 2 bytes)
+				uint16_t offset = READ_SHORT();
+				//Unconditional jump
+				vm.ip += offset;
+				break;
+			}
+			case OP_JUMP_IF_FALSE:
+				//Save offset in 16bit int (saved in 2 bytes)
+				uint16_t offset = READ_SHORT();
+				//Check cond
+				if(is_falsey(peek(0))) {
+					vm.ip += offset;
+				}
+				break;
 		}
 	}
 
 #undef READ_BYTE
 #undef READ_CONSTANT
+#undef READ_SHORT
 #undef READ_STRING
 #undef BINARY_OP
+
 }
 
 
