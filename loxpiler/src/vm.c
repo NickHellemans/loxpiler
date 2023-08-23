@@ -230,6 +230,13 @@ static InterpretResult run(void) {
 				vm.ip += offset;
 				break;
 			}
+			case OP_LOOP: {
+				//Save offset in 16bit int (saved in 2 bytes)
+				uint16_t offset = READ_SHORT();
+				//Unconditional jump backwards
+				vm.ip -= offset;
+				break;
+			}
 			case OP_JUMP_IF_FALSE:
 				//Save offset in 16bit int (saved in 2 bytes)
 				uint16_t offset = READ_SHORT();

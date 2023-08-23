@@ -151,6 +151,20 @@ static void emit_bytes(uint8_t byte1, uint8_t byte2) {
 	emit_byte(byte2);
 }
 
+static void emit_loop(int loopStart) {
+	emit_byte(OP_LOOP);
+
+	//Offset to jump back
+	// +2 to jump over OP_LOOP operands (16bits)
+	int offset = current_chunk()->size - loopStart + 2;
+	if (offset > UINT16_MAX) 
+		error("Body of loop too large.");
+	//Fill operands off OP_LOOP instruction with offset value
+	//Int -> 16bits
+	emit_byte((offset >> 8) & 0xff);
+	emit_byte(offset & 0xff);
+}
+
 static int emit_jump(uint8_t instruction) {
 	emit_byte(instruction);
 	//Fill operand with placeholder to "backpatch" later when we know real offset
@@ -363,6 +377,17 @@ static void define_variable(uint8_t global) {
 	emit_bytes(OP_DEFINE_GLOBAL, global);
 }
 
+static void and_(bool canAssign) {
+	//Left hand expression will be compiled, value will be on top of stack at runtime
+	//If that already is false -> entire expression will be false
+	//So skip right hand and leave value on stack so result of entire expression is false (short circuit)
+	int endJump = emit_jump(OP_JUMP_IF_FALSE);
+	//If not false, discard value for left hand expression + parse right hand which becomes result of entire and expression
+	emit_byte(OP_POP);
+	parse_precedence(PREC_AND);
+	patch_jump(endJump);
+}
+
 static void expression(void) {
 	parse_precedence(PREC_ASSIGNMENT);
 }
@@ -397,6 +422,8 @@ static void expression_statement(void) {
 	//= Evaluate expression and discard result
 	emit_byte(OP_POP);
 }
+
+
 
 static void if_statement(void) {
 	//Compile condition expression (leaves cond value on top of stack)
@@ -435,6 +462,24 @@ static void print_statement(void) {
 	expression();
 	consume(TOKEN_SEMICOLON, "Expect ';' after value");
 	emit_byte(OP_PRINT);
+}
+
+static void while_statement(void) {
+	//Location to jump back to if needed
+	int loopStart = current_chunk()->size;
+	//Parse cond 
+	consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
+	expression();
+	consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
+
+	//Jump over body if cond is false and take care of cond value on stack on either path
+	int exitJump = emit_jump(OP_JUMP_IF_FALSE);
+	emit_byte(OP_POP);
+	statement();
+	//Jump back to start instructions again starting with the cond check
+	emit_loop(loopStart);
+	patch_jump(exitJump);
+	emit_byte(OP_POP);
 }
 
 static void synchronize(void) {
@@ -480,8 +525,12 @@ static void statement(void) {
 	if(match(TOKEN_PRINT)) {
 		print_statement();
 	}
+
 	else if (match(TOKEN_IF)) {
 		if_statement();
+	}
+	else if(match(TOKEN_WHILE)) {
+		while_statement();
 	}
 	else if (match(TOKEN_LEFT_BRACE)) {
 		begin_scope();
@@ -501,6 +550,23 @@ static void number(bool canAssign) {
 static void string(bool canAssign) {
 	emit_constant(OBJ_VAL(copy_string(parser.prev.start + 1,
 		parser.prev.length - 2)));
+}
+
+//Can be implemented better with specific or instructions
+//But implemented with instructions already there
+static void or_(bool canAssign) {
+	//If left hand = true -> skip right hand expression
+	//Jump when value is truthy
+	//When left hand = false -> jump over uncondontial jump instruction
+	int elseJump = emit_jump(OP_JUMP_IF_FALSE);
+	//If left hand = true -> entire expression is true, jump over right hand expression
+	int endJump = emit_jump(OP_JUMP);
+
+	patch_jump(elseJump);
+	//Pop value off and compile right hand
+	emit_byte(OP_POP);
+	parse_precedence(PREC_OR);
+	patch_jump(endJump);
 }
 
 static void named_variable(Token name, bool canAssign) {
@@ -611,10 +677,10 @@ ParseRule rules[] = {
   [TOKEN_GREATER_EQUAL] =	{NULL,     binary, PREC_COMPARISON},
   [TOKEN_LESS] =			{NULL,     binary, PREC_COMPARISON},
   [TOKEN_LESS_EQUAL] =		{NULL,     binary, PREC_COMPARISON},
- [TOKEN_IDENTIFIER] =		{variable, NULL,   PREC_NONE},
+  [TOKEN_IDENTIFIER] =		{variable, NULL,   PREC_NONE},
   [TOKEN_STRING] =			{string,   NULL,   PREC_NONE},
   [TOKEN_NUMBER] =			{number,   NULL,   PREC_NONE},
-  [TOKEN_AND] =				{NULL,     NULL,   PREC_NONE},
+  [TOKEN_AND] =				{NULL,     and_,   PREC_AND},
   [TOKEN_CLASS] =			{NULL,     NULL,   PREC_NONE},
   [TOKEN_ELSE] =			{NULL,     NULL,   PREC_NONE},
   [TOKEN_FALSE] =			{literal,  NULL,   PREC_NONE},
@@ -622,7 +688,7 @@ ParseRule rules[] = {
   [TOKEN_FUN] =				{NULL,     NULL,   PREC_NONE},
   [TOKEN_IF] =				{NULL,     NULL,   PREC_NONE},
   [TOKEN_NIL] =				{literal,     NULL,   PREC_NONE},
-  [TOKEN_OR] =				{NULL,     NULL,   PREC_NONE},
+  [TOKEN_OR] =				{NULL,     or_,    PREC_OR},
   [TOKEN_PRINT] =			{NULL,     NULL,   PREC_NONE},
   [TOKEN_RETURN] =			{NULL,     NULL,   PREC_NONE},
   [TOKEN_SUPER] =			{NULL,     NULL,   PREC_NONE},
