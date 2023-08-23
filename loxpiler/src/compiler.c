@@ -423,7 +423,58 @@ static void expression_statement(void) {
 	emit_byte(OP_POP);
 }
 
+static void for_statement(void) {
+	//Scope var declaration
+	begin_scope();
+	consume(TOKEN_LEFT_PAREN, "Expect '(' after 'for'.");
+	//Var initializer
+	if(match(TOKEN_SEMICOLON)) {
+		//No initializer
+	} else if(match(TOKEN_VAR)) {
+		var_declaration();
+	}else {
+		//Statement because we need a ; after expression + pop value off stack so it does not leave value on stack
+		expression_statement();
+	}
+	//Cond 
+	int loopStart = current_chunk()->size;
+	int exitJump = -1;
+	if(!match(TOKEN_SEMICOLON)) {
+		expression();
+		consume(TOKEN_SEMICOLON, "Expect ';' after loop condition.");
 
+		// Jump out of the loop if the condition is false.
+		exitJump = emit_jump(OP_JUMP_IF_FALSE);
+		emit_byte(OP_POP); // Condition.
+	}
+
+	//Increment clause
+	//Jump over increment, run body, jump back to increment, run it and go to next iteration
+	if(!match(TOKEN_RIGHT_PAREN)) {
+		int bodyJump = emit_jump(OP_JUMP);
+		int incrementStart = current_chunk()->size;
+		expression();
+		//Usually assigment, so we only care about side effect, not value on stack -> pop off
+		emit_byte(OP_POP);
+		consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
+		//Jump to start of loop (before cond check) right after executing the increment clause
+		emit_loop(loopStart);
+		//Point loop start to offset where increment expressions begins
+		loopStart = incrementStart;
+		patch_jump(bodyJump);
+	}
+
+	statement();
+	//Jump back to cond
+	emit_loop(loopStart);
+	//Only if cond clause is there
+	if (exitJump != -1) {
+		patch_jump(exitJump);
+		emit_byte(OP_POP); // Condition.
+	}
+
+	end_scope();
+}
 
 static void if_statement(void) {
 	//Compile condition expression (leaves cond value on top of stack)
@@ -525,7 +576,9 @@ static void statement(void) {
 	if(match(TOKEN_PRINT)) {
 		print_statement();
 	}
-
+	else if(match(TOKEN_FOR)) {
+		for_statement();
+	}
 	else if (match(TOKEN_IF)) {
 		if_statement();
 	}
