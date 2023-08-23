@@ -174,8 +174,17 @@ static InterpretResult run(void) {
 		//Dispatch bytecode instructions = implement instruction opcode
 		switch (instruction = READ_BYTE()) {
 			case OP_RETURN: {
-				//Exit interpreter
-				return INTERPRET_OK;
+				Value result = pop_stack();
+				vm.frameCount--;
+				if(vm.frameCount == 0) {
+					pop_stack();
+					return INTERPRET_OK;
+				}
+
+				vm.stackTop = frame->slots;
+				push_stack(result);
+				frame = &vm.frames[vm.frameCount - 1];
+				break;
 			}
 
 			case OP_CONSTANT: {
