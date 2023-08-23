@@ -36,6 +36,10 @@ void free_object(Obj* obj) {
 			FREE_ARRAY(char, string->chars, string->length + 1);
 			FREE(ObjString, obj);
 			break;
+
+		case OBJ_NATIVE:
+			FREE(ObjNative, obj);
+			break;
 	}
 }
 

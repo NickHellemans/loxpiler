@@ -3,6 +3,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+
 #include "common.h"
 #include "debug.h"
 #include "compiler.h"
@@ -13,6 +15,10 @@
 //Better to pass around VM with a pointer, but we use 1 global VM to make code a bit lighter
 //We only need one anyways
 VM vm;
+
+static Value clock_native(int argCount, Value* args) {
+	return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+}
 
 static void reset_stack(void) {
 	//Point at start of array
@@ -47,11 +53,21 @@ static void runtime_error(const char* format, ...) {
 	reset_stack();
 }
 
+static void define_native(const char* name, NativeFn function) {
+	push_stack(OBJ_VAL(copy_string(name, (int)strlen(name))));
+	push_stack(OBJ_VAL(new_native(function)));
+	table_set(&vm.globals, AS_STRING(vm.stack[0]), vm.stack[1]);
+	pop_stack();
+	pop_stack();
+}
+
 void init_vm(void) {
 	reset_stack();
 	vm.objects = NULL;
 	init_table(&vm.globals);
 	init_table(&vm.strings);
+
+	define_native("clock", clock_native);
 }
 
 void free_vm(void) {
@@ -102,6 +118,13 @@ static bool call_value(Value callee, int argCount) {
 			case OBJ_FUNCTION:
 				return call(AS_FUNCTION(callee), argCount);
 
+			case OBJ_NATIVE: {
+				NativeFn native = AS_NATIVE(callee);
+				Value result = native(argCount, vm.stackTop - argCount);
+				vm.stackTop -= argCount + 1;
+				push_stack(result);
+				return true;
+			}
 			default:
 				//Non callable
 				break;
