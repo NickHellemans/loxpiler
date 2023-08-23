@@ -29,11 +29,21 @@ static void runtime_error(const char* format, ...) {
 	va_end(args);
 	fputs("\n", stderr);
 
-	CallFrame* frame = &vm.frames[vm.frameCount - 1];
-	size_t instruction = frame->ip - frame->function->chunk.code - 1;
-	int line = frame->function->chunk.lines[instruction];
+	//Print stack trace
+	for (int i = vm.frameCount - 1; i >= 0; i--) {
+		CallFrame* frame = &vm.frames[i];
+		ObjFunction* function = frame->function;
+		size_t instruction = frame->ip - function->chunk.code - 1;
+		fprintf(stderr, "[line %d] in ",
+			function->chunk.lines[instruction]);
+		if (function->name == NULL) {
+			fprintf(stderr, "script\n");
+		}
+		else {
+			fprintf(stderr, "%s()\n", function->name->chars);
+		}
+	}
 
-	fprintf(stderr, "[line %d] in script\n", line);
 	reset_stack();
 }
 
@@ -64,6 +74,41 @@ Value pop_stack(void) {
 
 static Value peek(int distance) {
 	return vm.stackTop[-1 - distance];
+}
+
+static bool call (ObjFunction* fn, int argCount) {
+
+	//Too many args passed in
+	if (argCount != fn->arity) {
+		runtime_error("Expected %d arguments but got %d.",fn->arity, argCount);
+		return false;
+	}
+
+	if (vm.frameCount == FRAMES_MAX) {
+		runtime_error("Stack overflow.");
+		return false;
+	}
+
+	CallFrame* frame = &vm.frames[vm.frameCount++];
+	frame->function = fn;
+	frame->ip = fn->chunk.code;
+	frame->slots = vm.stackTop - argCount - 1;
+	return true;
+}
+
+static bool call_value(Value callee, int argCount) {
+	if(IS_OBJ(callee)) {
+		switch (OBJ_TYPE(callee)) {
+			case OBJ_FUNCTION:
+				return call(AS_FUNCTION(callee), argCount);
+
+			default:
+				//Non callable
+				break;
+		}
+	}
+	runtime_error("Can only call functions and classes.");
+	return false;
 }
 
 static bool is_falsey(Value value) {
@@ -255,6 +300,15 @@ static InterpretResult run(void) {
 					frame->ip += offset;
 				}
 				break;
+
+			case OP_CALL: {
+				int argCount = READ_BYTE();
+				if (!call_value(peek(argCount), argCount)) {
+					return INTERPRET_RUNTIME_ERROR;
+				}
+				frame = &vm.frames[vm.frameCount - 1];
+				break;
+			}
 		}
 	}
 
@@ -276,10 +330,8 @@ InterpretResult interpret(const char* source) {
 	//Store on stack in reserved stack slot and prepare initial call frame to execute the code
 	//Get interpreter ready to start executing code
 	push_stack(OBJ_VAL(function));
-	CallFrame* frame = &vm.frames[vm.frameCount++];
-	frame->function = function;
-	frame->ip = function->chunk.code;
-	frame->slots = vm.stack;
+
+	call(function, 0);
 
 	return run();
 }

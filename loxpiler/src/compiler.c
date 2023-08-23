@@ -15,6 +15,7 @@
 
 static void statement(void);
 static void declaration(void);
+static void expression(void);
 
 typedef struct {
 	Token curr;
@@ -411,6 +412,24 @@ static void define_variable(uint8_t global) {
 	emit_bytes(OP_DEFINE_GLOBAL, global);
 }
 
+static uint8_t argument_list(void) {
+	//Parse argument expressions
+	//Leaves values on stack in preparation for stack
+	uint8_t argCount = 0;
+	if(!check_type(TOKEN_RIGHT_PAREN)) {
+		do {
+			expression();
+			if (argCount == 255) {
+				error("Can't have more than 255 arguments.");
+			}
+			argCount++;
+		} while (match(TOKEN_COMMA));
+	}
+
+	consume(TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
+	return argCount;
+}
+
 static void and_(bool canAssign) {
 	//Left hand expression will be compiled, value will be on top of stack at runtime
 	//If that already is false -> entire expression will be false
@@ -777,6 +796,11 @@ static void binary(bool canAssign) {
 	}
 }
 
+static void call(bool canAssign) {
+	uint8_t argCount = argument_list();
+	emit_bytes(OP_CALL, argCount);
+}
+
 static void literal(bool canAssign) {
 	switch (parser.prev.type) {
 		case TOKEN_FALSE: emit_byte(OP_FALSE); break;
@@ -787,7 +811,7 @@ static void literal(bool canAssign) {
 }
 
 ParseRule rules[] = {
-  [TOKEN_LEFT_PAREN] =		{grouping, NULL,   PREC_NONE},
+  [TOKEN_LEFT_PAREN] =		{grouping, call,   PREC_CALL},
   [TOKEN_RIGHT_PAREN] =		{NULL,     NULL,   PREC_NONE},
   [TOKEN_LEFT_BRACE] =		{NULL,     NULL,   PREC_NONE},
   [TOKEN_RIGHT_BRACE] =		{NULL,     NULL,   PREC_NONE},
