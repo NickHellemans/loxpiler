@@ -1,17 +1,30 @@
 #pragma once
 
 #include "chunk.h"
+#include "object.h"
 #include "table.h"
 #include "value.h"
 
-#define STACK_MAX 256
+#define FRAMES_MAX 64
+#define STACK_MAX (FRAMES_MAX * UINT8_COUNT)
 
+//Each function invocation tracks where locals begin + where caller should return after fn
+typedef struct {
+	//Fn being called (look up constants)
+	ObjFunction* function;
+	//Store caller's ip --> return from fn - VM jumps to ip of caller's callframe and resume
+	uint8_t* ip;
+	//First slot fn can use in VM value stack
+	Value* slots;
+} CallFrame;
 
 typedef struct {
-	Chunk* chunk;
+	CallFrame frames[FRAMES_MAX];
+	int frameCount;
 	//instruction pointer, stores location of instruction to be executed next
 	//Sometimes called program counter (pc)
-	uint8_t* ip;
+	//uint8_t* ip;
+
 	Value stack[STACK_MAX];
 	//Store pointer instead of index
 	//It is faster to deref a pointer than to index in an array

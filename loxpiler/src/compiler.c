@@ -53,7 +53,16 @@ typedef struct {
 	int depth;
 } Local;
 
+typedef enum {
+	TYPE_FUNCTION,
+	TYPE_SCRIPT
+} FunctionType;
+
 typedef struct {
+	//Ref to current function being built
+	ObjFunction* function;
+	//Compiling top-level code vs body of a function
+	FunctionType type;
 	//Array of local vars that are currently in scope during each point of compilation
 	//Instruction operand = single byte -> Max locals = uint8 max (256 indexes available)
 	Local locals[UINT8_COUNT];
@@ -73,7 +82,7 @@ Compiler* current = NULL;
 Chunk* compilingChunk;
 
 static Chunk* current_chunk(void) {
-	return compilingChunk;
+	return &current->function->chunk;
 }
 
 static void error_at(Token* token, const char* message) {
@@ -208,20 +217,35 @@ static void patch_jump(int offset) {
 	current_chunk()->code[offset + 1] = jump & 0xff;
 }
 
-static void init_compiler(Compiler* compiler) {
+static void init_compiler(Compiler* compiler, FunctionType type) {
+	compiler->function = NULL;
+	compiler->type = type;
 	compiler->localCount = 0;
 	compiler->scopeDepth = 0;
+	compiler->function = new_function();
 	current = compiler;
+
+	//Claim first stack slot of locals for internal use
+	//Empty name so user cannot write an identifier that refers to it
+	Local* local = &current->locals[current->localCount++];
+	local->depth = 0;
+	local->name.start = "";
+	local->name.length = 0;
 }
 
-static void end_compiler(void) {
+static ObjFunction* end_compiler(void) {
 	emit_return();
+	ObjFunction* function = current->function;
 
 #ifdef DEBUG_PRINT_CODE
 	if (!parser.hadError) {
-		disassemble_chunk(current_chunk(), "code");
+		disassemble_chunk(current_chunk(), function->name != NULL
+			? function->name->chars : "<script>");
 	}
 #endif
+
+	//Return compiled function with all code in it
+	return function;
 }
 
 static void begin_scope(void) {
@@ -449,10 +473,12 @@ static void for_statement(void) {
 	}
 
 	//Increment clause
-	//Jump over increment, run body, jump back to increment, run it and go to next iteration
+	//Jump over increment (if there is one), run body, jump back to increment, run it and go to next iteration
 	if(!match(TOKEN_RIGHT_PAREN)) {
+		//Jump over increment to body statements
 		int bodyJump = emit_jump(OP_JUMP);
 		int incrementStart = current_chunk()->size;
+		//Increment expression
 		expression();
 		//Usually assigment, so we only care about side effect, not value on stack -> pop off
 		emit_byte(OP_POP);
@@ -757,10 +783,10 @@ static ParseRule* get_rule(TokenType type) {
 	return &rules[type];
 }
 
-bool compile(const char* source, Chunk* chunk) {
+ObjFunction* compile(const char* source, Chunk* chunk) {
 	init_scanner(source);
-	Compiler compiler; init_compiler(&compiler);
-	compilingChunk = chunk;
+	Compiler compiler; init_compiler(&compiler, TYPE_SCRIPT);
+	
 	parser.hadError = false;
 	parser.panicMode = false;
 
@@ -770,6 +796,6 @@ bool compile(const char* source, Chunk* chunk) {
 		declaration();
 	}
 
-	end_compiler();
-	return !parser.hadError;
+	ObjFunction* function = end_compiler();
+	return parser.hadError ? NULL : function;
 }

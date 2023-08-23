@@ -5,6 +5,8 @@
 #include "memory.h"
 #include "vm.h"
 
+static void print_function(ObjFunction* function);
+
 #define ALLOCATE_OBJ(type, objectType) \
     (type*)allocate_object(sizeof(type), objectType)
 
@@ -16,6 +18,14 @@ static Obj* allocate_object(size_t size, ObjType type) {
 	object->next = vm.objects;
 	vm.objects = object;
 	return object;
+}
+
+ObjFunction* new_function(void) {
+	ObjFunction* function = ALLOCATE_OBJ(ObjFunction, OBJ_FUNCTION);
+	function->arity = 0;
+	function->name = NULL;
+	init_chunk(&function->chunk);
+	return function;
 }
 
 static ObjString* allocate_string(char* chars, int length, uint32_t hash) {
@@ -41,6 +51,9 @@ static uint32_t hash_string(const char* key, int length) {
 
 void print_object(Value value) {
 	switch (OBJ_TYPE(value)) {
+		case OBJ_FUNCTION:
+			print_function(AS_FUNCTION(value));
+			break;
 		case OBJ_STRING:
 			printf("%s", AS_CSTRING(value));
 			break;
@@ -73,4 +86,13 @@ ObjString* copy_string(const char* chars, int length) {
 	memcpy(heapChars, chars, length);
 	heapChars[length] = '\0';
 	return allocate_string(heapChars, length, hash);
+}
+
+
+static void print_function(ObjFunction* function) {
+	if (function->name == NULL) {
+		printf("<script>");
+		return;
+	}
+	printf("<fn %s>", function->name->chars);
 }

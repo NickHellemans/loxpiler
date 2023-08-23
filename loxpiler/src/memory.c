@@ -23,6 +23,14 @@ void* reallocate(void* ptr, size_t oldCap, size_t newCap) {
 
 void free_object(Obj* obj) {
 	switch (obj->type) {
+
+		case OBJ_FUNCTION:
+			ObjFunction* fn = (ObjFunction*)obj;
+			free_chunk(&fn->chunk);
+			FREE(ObjFunction, obj);
+			//Let gc deal with name (string)
+			break;
+
 		case OBJ_STRING:
 			ObjString* string = (ObjString*)obj;
 			FREE_ARRAY(char, string->chars, string->length + 1);
