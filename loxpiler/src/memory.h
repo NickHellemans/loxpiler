@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "common.h"
+#include "value.h"
 
 #define ALLOCATE(type, count) \
     (type*)reallocate(NULL, 0, sizeof(type) * (count))
@@ -25,5 +26,7 @@
 //Non‑zero 	Smaller than oldSize 	Shrink existing allocation.
 //Non‑zero 	Larger than oldSize 	Grow existing allocation.
 void* reallocate(void* ptr, size_t oldCap, size_t newCap);
-
+void mark_object(Obj* object);
+void mark_value(Value value);
+void collect_garbage(void);
 void free_objects(void);

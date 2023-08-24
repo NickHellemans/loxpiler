@@ -37,8 +37,16 @@ typedef struct {
 	Table strings;
 	//Open upvalues still on stack
 	ObjUpvalue* openUpvalues;
+	//Live memory
+	size_t bytesAllocated;
+	//Threshold to trigger gc
+	size_t nextGC;
 	//All allocated objects to track
 	Obj* objects;
+	//Mark objects gray that still need to mark potential references
+	int grayCount;
+	int grayCapacity;
+	Obj** grayStack;
 
 } VM;
 

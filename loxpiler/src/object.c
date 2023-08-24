@@ -13,10 +13,14 @@ static void print_function(ObjFunction* function);
 static Obj* allocate_object(size_t size, ObjType type) {
 	Obj* object = (Obj*)reallocate(NULL, 0, size);
 	object->type = type;
-
+	object->isMarked = false;
 	//Insert at head of GC linked list
 	object->next = vm.objects;
 	vm.objects = object;
+
+#ifdef DEBUG_LOG_GC
+	printf("%p allocate %zu for %d\n", (void*)object, size, type);
+#endif
 	return object;
 }
 
@@ -54,9 +58,12 @@ static ObjString* allocate_string(char* chars, int length, uint32_t hash) {
 	string->length = length;
 	string->chars = chars;
 	string->hash = hash;
+
+	push_stack(OBJ_VAL(string));
 	//Store string in interned strings table (more like a hashset)
 	//Only care about keys, so val = nil
 	table_set(&vm.strings, string, NIL_VAL);
+	pop_stack();
 	return string;
 }
 

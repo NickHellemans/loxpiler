@@ -153,3 +153,21 @@ ObjString* table_find_string(Table* table, const char* chars, int length, uint32
 		index = (index + 1 ) % table->cap;
 	}
 }
+
+void table_remove_white(Table* table) {
+	//Remove references to strings that will be swept after this
+	for (int i = 0; i < table->cap; i++) {
+		Entry* entry = &table->elements[i];
+		if (entry->key != NULL && !entry->key->obj.isMarked) {
+			table_delete(table, entry->key);
+		}
+	}
+}
+
+void mark_table(Table* table) {
+	for(int i = 0; i < table->cap; i++) {
+		Entry* entry = &table->elements[i];
+		mark_object((Obj*)entry->key);
+		mark_value(entry->value);
+	}
+}
