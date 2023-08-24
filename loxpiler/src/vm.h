@@ -11,7 +11,7 @@
 //Each function invocation tracks where locals begin + where caller should return after fn
 typedef struct {
 	//Fn being called (look up constants)
-	ObjFunction* function;
+	ObjClosure* closure;
 	//Store caller's ip --> return from fn - VM jumps to ip of caller's callframe and resume
 	uint8_t* ip;
 	//First slot fn can use in VM value stack
@@ -35,6 +35,8 @@ typedef struct {
 	Table globals;
 	//Interned strings
 	Table strings;
+	//Open upvalues still on stack
+	ObjUpvalue* openUpvalues;
 	//All allocated objects to track
 	Obj* objects;
 

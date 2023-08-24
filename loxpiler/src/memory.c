@@ -31,6 +31,14 @@ void free_object(Obj* obj) {
 			//Let gc deal with name (string)
 			break;
 
+		case OBJ_CLOSURE:
+			//Only free ObjClosure itself not the ObjFunction
+			//Closure doesn't own the fn, could be multiple closures referencing same fn
+			ObjClosure* closure = (ObjClosure*)obj;
+			FREE_ARRAY(ObjUpvalue*, closure->upvalues, closure->upvalueCount);
+			FREE(ObjClosure, obj);
+			break;
+
 		case OBJ_STRING:
 			ObjString* string = (ObjString*)obj;
 			FREE_ARRAY(char, string->chars, string->length + 1);
@@ -39,6 +47,10 @@ void free_object(Obj* obj) {
 
 		case OBJ_NATIVE:
 			FREE(ObjNative, obj);
+			break;
+
+		case OBJ_UPVALUE:
+			FREE(ObjUpvalue, obj);
 			break;
 	}
 }
