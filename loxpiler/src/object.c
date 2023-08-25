@@ -24,6 +24,13 @@ static Obj* allocate_object(size_t size, ObjType type) {
 	return object;
 }
 
+ObjClass* new_class(ObjString* name) {
+	//Klass so it is easy to compile for c++ where class is keyword
+	ObjClass* klass = ALLOCATE_OBJ(ObjClass, OBJ_CLASS);
+	klass->name = name;
+	return klass;
+}
+
 ObjFunction* new_function(void) {
 	ObjFunction* function = ALLOCATE_OBJ(ObjFunction, OBJ_FUNCTION);
 	function->arity = 0;
@@ -79,6 +86,11 @@ static uint32_t hash_string(const char* key, int length) {
 
 void print_object(Value value) {
 	switch (OBJ_TYPE(value)) {
+
+		case OBJ_CLASS:
+			printf("%s", AS_CLASS(value)->name->chars);
+			break;
+
 		case OBJ_FUNCTION:
 			print_function(AS_FUNCTION(value));
 			break;

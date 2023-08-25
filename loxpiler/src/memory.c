@@ -23,7 +23,7 @@ void* reallocate(void* ptr, size_t oldCap, size_t newCap) {
 		//Force GC on every memory allocation
 		collect_garbage();
 #endif
-		//Collect garbage after threshold of max bytes allocated is reached
+		//Collect garbage after threshold of max bytes allocated is reached and we are allocating memory
 		if (vm.bytesAllocated > vm.nextGC) {
 			collect_garbage();
 		}
@@ -45,6 +45,7 @@ void* reallocate(void* ptr, size_t oldCap, size_t newCap) {
 
 void mark_object(Obj* object) {
 	if (object == NULL) return;
+	//Break out cycles if already marked
 	if (object->isMarked) return;
 
 #ifdef DEBUG_LOG_GC
@@ -57,6 +58,7 @@ void mark_object(Obj* object) {
 
 	if (vm.grayCapacity < vm.grayCount + 1) {
 		vm.grayCapacity = GROW_CAPACITY(vm.grayCapacity);
+		//Call to system realloc: Memory in graystack is not managed by GC
 		vm.grayStack = (Obj**)realloc(vm.grayStack,sizeof(Obj*) * vm.grayCapacity);
 		if (vm.grayStack == NULL) 
 			exit(1);
@@ -67,7 +69,7 @@ void mark_object(Obj* object) {
 
 void mark_value(Value value) {
 
-	//Only mark heap allocated objects
+	//Only mark heap allocated objects (no need to free stack allocated objects)
 	if (IS_OBJ(value))
 		mark_object(AS_OBJ(value));
 }
@@ -85,7 +87,13 @@ static void blacken_object(Obj* object) {
 	printf("\n");
 #endif
 
+	//Mark references based on obj type
 	switch (object->type) {
+
+		case OBJ_CLASS:
+			ObjClass* klass = (ObjClass*)object;
+			mark_object((Obj*)klass->name);
+			break;
 
 		case OBJ_CLOSURE: {
 			ObjClosure* closure = (ObjClosure*)object;
@@ -106,6 +114,8 @@ static void blacken_object(Obj* object) {
 		case OBJ_UPVALUE:
 			mark_value(((ObjUpvalue*)object)->closed);
 			break;
+
+		//No references
 		case OBJ_NATIVE:
 		case OBJ_STRING:
 			break;
@@ -119,6 +129,11 @@ void free_object(Obj* obj) {
 #endif
 
 	switch (obj->type) {
+
+		case OBJ_CLASS: {
+			FREE(ObjClass, obj);
+			break;
+		}
 
 		case OBJ_FUNCTION:
 			ObjFunction* fn = (ObjFunction*)obj;
@@ -157,12 +172,12 @@ void mark_roots(void) {
 		mark_value(*slot);
 	}
 
-	//Mark every closure
+	//Mark every closure in stack of call frames
 	for(int i = 0; i < vm.frameCount; i++) {
 		mark_object((Obj*)vm.frames[i].closure);
 	}
 
-	//Upvalues
+	//Mark open upvalues list 
 	for(ObjUpvalue* upvalue = vm.openUpvalues; upvalue != NULL; upvalue = upvalue->next) {
 		mark_object((Obj*) upvalue);
 	}
@@ -170,10 +185,13 @@ void mark_roots(void) {
 	//Mark globals
 	mark_table(&vm.globals);
 
+	//GC can run in compiling phase, values compiler accesses need to be marked
 	mark_compiler_roots();
 }
 
 void trace_references(void) {
+	//While worklist is not empty -> keep pulling out gray objects and traverse references
+	//These references become new gray values in the worklist to mark their references too
 	while(vm.grayCount > 0) {
 		Obj* obj = vm.grayStack[--vm.grayCount];
 		blacken_object(obj);
@@ -184,8 +202,10 @@ void sweep(void) {
 	Obj* prev = NULL;
 	Obj* object = vm.objects;
 
+	//Walk the list of all allocated objects
 	while(object != NULL) {
 		if(object->isMarked) {
+			//Mark false for next GC
 			object->isMarked = false;
 			prev = object;
 			object = object->next;
@@ -193,6 +213,7 @@ void sweep(void) {
 			Obj* trash = object;
 			object = object->next;
 
+			//Removing head or not
 			if(prev != NULL) {
 				prev->next = object;
 			} else {

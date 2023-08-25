@@ -416,10 +416,15 @@ static InterpretResult run(void) {
 					}
 				}
 				break;
-
-			case OP_CLOSE_UPVALUE:
+			}
+			case OP_CLOSE_UPVALUE: {
 				close_upvalues(vm.stackTop - 1);
 				pop_stack();
+				break;
+			}
+
+			case OP_CLASS: {
+				push_stack(OBJ_VAL(new_class(READ_STRING())));
 				break;
 			}
 		}

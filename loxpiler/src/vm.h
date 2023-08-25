@@ -41,9 +41,9 @@ typedef struct {
 	size_t bytesAllocated;
 	//Threshold to trigger gc
 	size_t nextGC;
-	//All allocated objects to track
+	//Head of all allocated objects to track
 	Obj* objects;
-	//Mark objects gray that still need to mark potential references
+	//Store all gray objects that still need to mark potential references in a worklist
 	int grayCount;
 	int grayCapacity;
 	Obj** grayStack;

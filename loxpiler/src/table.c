@@ -155,6 +155,7 @@ ObjString* table_find_string(Table* table, const char* chars, int length, uint32
 }
 
 void table_remove_white(Table* table) {
+	//Clear out dangling pointers for to be freed memory
 	//Remove references to strings that will be swept after this
 	for (int i = 0; i < table->cap; i++) {
 		Entry* entry = &table->elements[i];

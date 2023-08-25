@@ -536,6 +536,24 @@ static void function(FunctionType type) {
 	}
 }
 
+static void class_declaration(void) {
+	consume(TOKEN_IDENTIFIER, "Expect class name.");
+	//Add class name to surrounding function constant table as a string
+	uint8_t nameConstant = identifier_constant(&parser.prev);
+	//Bind class object to name
+	declare_variable();
+	//Create class object at runtime
+	//Constant table index of the class's name as an operand
+	emit_bytes(OP_CLASS, nameConstant);
+	//Define variable before body
+	//Refer to the containing class inside the bodies of its own methods
+	define_variable(nameConstant);
+
+	//Compile body
+	consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+	consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
+}
+
 static void fun_declaration(void) {
 	//Get function name
 	uint8_t global = parse_variable("Expect function name.");
@@ -725,7 +743,10 @@ static void synchronize(void) {
 
 static void declaration(void) {
 
-	if(match(TOKEN_FUN)) {
+	if(match(TOKEN_CLASS)) {
+		class_declaration();
+	}
+	else if(match(TOKEN_FUN)) {
 		fun_declaration();
 	}
 	else if(match(TOKEN_VAR)) {

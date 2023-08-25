@@ -7,11 +7,13 @@
 #define OBJ_TYPE(value)        (AS_OBJ(value)->type)
 #define IS_FUNCTION(value)     is_obj_type(value, OBJ_FUNCTION)
 #define IS_CLOSURE(value)      is_obj_type(value, OBJ_CLOSURE)
+#define IS_CLASS(value)        is_obj_type(value, OBJ_CLASS)
 #define IS_NATIVE(value)       is_obj_type(value, OBJ_NATIVE)
 #define IS_STRING(value)       is_obj_type(value, OBJ_STRING)
 
 #define AS_FUNCTION(value)     ((ObjFunction*)AS_OBJ(value))
 #define AS_CLOSURE(value)      ((ObjClosure*)AS_OBJ(value))
+#define AS_CLASS(value)        ((ObjClass*)AS_OBJ(value))
 #define AS_NATIVE(value) \
     (((ObjNative*)AS_OBJ(value))->function)
 #define AS_STRING(value)       ((ObjString*)AS_OBJ(value))
@@ -20,6 +22,7 @@
 typedef enum {
 	OBJ_FUNCTION,
 	OBJ_CLOSURE,
+	OBJ_CLASS,
 	OBJ_NATIVE,
 	OBJ_STRING,
 	OBJ_UPVALUE,
@@ -28,7 +31,9 @@ typedef enum {
 struct Obj {
 	ObjType type;
 	//For GC
+	//Mark flag (reachability)
 	bool isMarked;
+	//Linked list of all heap allocated objects
 	Obj* next;
 };
 
@@ -56,6 +61,11 @@ typedef struct {
 	int upvalueCount;
 } ObjClosure;
 
+typedef struct {
+	Obj obj;
+	ObjString* name;
+} ObjClass;
+
 //Builtin fn
 typedef Value(*NativeFn)(int argCount, Value* args);
 
@@ -74,6 +84,7 @@ struct ObjString {
 
 
 void print_object(Value value);
+ObjClass* new_class(ObjString* name);
 ObjFunction* new_function(void);
 ObjClosure* new_closure(ObjFunction* function);
 ObjNative* new_native(NativeFn function);
