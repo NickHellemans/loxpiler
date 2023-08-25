@@ -35,6 +35,7 @@ typedef struct {
 	Table globals;
 	//Interned strings
 	Table strings;
+	ObjString* initString;
 	//Open upvalues still on stack
 	ObjUpvalue* openUpvalues;
 	//Live memory

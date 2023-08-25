@@ -74,12 +74,16 @@ void init_vm(void) {
 	init_table(&vm.globals);
 	init_table(&vm.strings);
 
+	vm.initString = NULL;
+	vm.initString = copy_string("init", 4);
+
 	define_native("clock", clock_native);
 }
 
 void free_vm(void) {
 	free_table(&vm.globals);
 	free_table(&vm.strings);
+	vm.initString = NULL;
 	free_objects();
 }
 
@@ -125,12 +129,22 @@ static bool call_value(Value callee, int argCount) {
 
 			case OBJ_BOUND_METHOD: {
 				ObjBoundMethod* bound = AS_BOUND_METHOD(callee);
+				vm.stackTop[-argCount - 1] = bound->receiver;
 				return call(bound->method, argCount);
 			}
 
 			case OBJ_CLASS: {
 				ObjClass* klass = AS_CLASS(callee);
 				vm.stackTop[-argCount - 1] = OBJ_VAL(new_instance(klass));
+				Value initializer;
+
+				if (table_get(&klass->methods, vm.initString, &initializer)) {
+					return call(AS_CLOSURE(initializer), argCount);
+				} else if (argCount != 0) {
+					runtime_error("Expected 0 arguments but got %d.",argCount);
+					return false;
+				}
+
 				return true;
 			}
 
@@ -153,6 +167,33 @@ static bool call_value(Value callee, int argCount) {
 	return false;
 }
 
+static bool invoke_from_class(ObjClass* klass, ObjString* name, int argCount) {
+	Value method;
+	if (!table_get(&klass->methods, name, &method)) {
+		runtime_error("Undefined property '%s'.", name->chars);
+		return false;
+	}
+	return call(AS_CLOSURE(method), argCount);
+}
+
+static bool invoke(ObjString* name, int argCount) {
+	Value receiver = peek(argCount);
+
+	if (!IS_INSTANCE(receiver)) {
+		runtime_error("Only instances have methods.");
+		return false;
+	}
+
+	ObjInstance* instance = AS_INSTANCE(receiver);
+
+	Value value;
+	if (table_get(&instance->fields, name, &value)) {
+		vm.stackTop[-argCount - 1] = value;
+		return call_value(value, argCount);
+	}
+
+	return invoke_from_class(instance->klass, name, argCount);
+}
 
 static bool bind_method(ObjClass* klass, ObjString* name) {
 	Value method;
@@ -472,6 +513,16 @@ static InterpretResult run(void) {
 			case OP_CALL: {
 				int argCount = READ_BYTE();
 				if (!call_value(peek(argCount), argCount)) {
+					return INTERPRET_RUNTIME_ERROR;
+				}
+				frame = &vm.frames[vm.frameCount - 1];
+				break;
+			}
+
+			case OP_INVOKE: {
+				ObjString* method = READ_STRING();
+				int argCount = READ_BYTE();
+				if (!invoke(method, argCount)) {
 					return INTERPRET_RUNTIME_ERROR;
 				}
 				frame = &vm.frames[vm.frameCount - 1];

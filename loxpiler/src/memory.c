@@ -220,6 +220,8 @@ void mark_roots(void) {
 
 	//GC can run in compiling phase, values compiler accesses need to be marked
 	mark_compiler_roots();
+
+	mark_object((Obj*)vm.initString);
 }
 
 void trace_references(void) {

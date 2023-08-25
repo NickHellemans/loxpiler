@@ -62,7 +62,9 @@ typedef struct {
 
 typedef enum {
 	TYPE_FUNCTION,
-	TYPE_SCRIPT
+	TYPE_METHOD,
+	TYPE_INITIALIZER,
+	TYPE_SCRIPT,
 } FunctionType;
 
 typedef struct Compiler{
@@ -82,11 +84,17 @@ typedef struct Compiler{
 	int scopeDepth;
 } Compiler;
 
+typedef struct ClassCompiler {
+	struct ClassCompiler* enclosing;
+} ClassCompiler;
+
 static ParseRule* get_rule(TokenType type);
 
 //Global var to not have to pass around as ptr
 Parser parser;
 Compiler* current = NULL;
+
+ClassCompiler* currentClass = NULL;
 
 Chunk* compilingChunk;
 
@@ -194,7 +202,12 @@ static int emit_jump(uint8_t instruction) {
 }
 
 static void emit_return(void) {
-	emit_byte(OP_NIL);
+	if (current->type == TYPE_INITIALIZER) {
+		emit_bytes(OP_GET_LOCAL, 0);
+	}
+	else {
+		emit_byte(OP_NIL);
+	}
 	emit_byte(OP_RETURN);
 }
 
@@ -242,12 +255,21 @@ static void init_compiler(Compiler* compiler, FunctionType type) {
 	}
 
 	//Claim first stack slot of locals for internal use
+	//For fn calls that slot holds the function being called
 	//Empty name so user cannot write an identifier that refers to it
+	//For method calls we store the receiver in the first slot
 	Local* local = &current->locals[current->localCount++];
 	local->depth = 0;
 	local->isCaptured = false;
-	local->name.start = "";
-	local->name.length = 0;
+
+	if (type != TYPE_FUNCTION) {
+		local->name.start = "this";
+		local->name.length = 4;
+	}
+	else {
+		local->name.start = "";
+		local->name.length = 0;
+	}
 }
 
 static ObjFunction* end_compiler(void) {
@@ -543,7 +565,12 @@ static void method(void) {
 	uint8_t constant = identifier_constant(&parser.prev);
 
 	//Method parameters and body
-	FunctionType type = TYPE_FUNCTION;
+	FunctionType type = TYPE_METHOD;
+	if (parser.prev.length == 4 &&
+		memcmp(parser.prev.start, "init", 4) == 0) {
+		type = TYPE_INITIALIZER;
+	}
+
 	function(type);
 	emit_bytes(OP_METHOD, constant);
 }
@@ -562,6 +589,10 @@ static void class_declaration(void) {
 	//Refer to the containing class inside the bodies of its own methods
 	define_variable(nameConstant);
 
+	ClassCompiler classCompiler;
+	classCompiler.enclosing = currentClass;
+	currentClass = &classCompiler;
+
 	//Before binding methods load class back on top of stack so class is sitting under method's closure
 	named_variable(className, false);
 	//Compile body
@@ -572,6 +603,8 @@ static void class_declaration(void) {
 	consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
 	//Pop class off
 	emit_byte(OP_POP);
+
+	currentClass = currentClass->enclosing;
 }
 
 static void fun_declaration(void) {
@@ -709,6 +742,9 @@ static void return_statement(void) {
 	if(match(TOKEN_SEMICOLON)) {
 		emit_return();
 	} else {
+		if (current->type == TYPE_INITIALIZER) {
+			error("Can't return a value from an initializer.");
+		}
 		expression();
 		consume(TOKEN_SEMICOLON, "Expect ';' after return value.");
 		emit_byte(OP_RETURN);
@@ -869,6 +905,16 @@ static void variable(bool canAssign) {
 	named_variable(parser.prev, canAssign);
 }
 
+static void this_(bool canAssign) {
+
+	if (currentClass == NULL) {
+		error("Can't use 'this' outside of a class.");
+		return;
+	}
+	//Treat 'this' as a lexical scoped var name access
+	variable(false);
+}
+
 static void grouping(bool canAssign) {
 	expression();
 	consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression");
@@ -928,7 +974,13 @@ static void dot(bool canAssign) {
 	if(canAssign && match(TOKEN_EQUAL)) {
 		expression();
 		emit_bytes(OP_SET_PROPERTY, name);
-	} else {
+	}
+	else if (match(TOKEN_LEFT_PAREN)) {
+		uint8_t argCount = argument_list();
+		emit_bytes(OP_INVOKE, name);
+		emit_byte(argCount);
+	}
+	else {
 		emit_bytes(OP_GET_PROPERTY, name);
 	}
 	
@@ -978,7 +1030,7 @@ ParseRule rules[] = {
   [TOKEN_PRINT] =			{NULL,     NULL,   PREC_NONE},
   [TOKEN_RETURN] =			{NULL,     NULL,   PREC_NONE},
   [TOKEN_SUPER] =			{NULL,     NULL,   PREC_NONE},
-  [TOKEN_THIS] =			{NULL,     NULL,   PREC_NONE},
+  [TOKEN_THIS] =			{this_,    NULL,   PREC_NONE},
   [TOKEN_TRUE] =			{literal,     NULL,   PREC_NONE},
   [TOKEN_VAR] =				{NULL,     NULL,   PREC_NONE},
   [TOKEN_WHILE] =			{NULL,     NULL,   PREC_NONE},
