@@ -65,8 +65,10 @@ static void adjust_capacity(Table* table, int cap) {
 	//Rehash elems
 	for(int i = 0; i < table->cap; i++) {
 		Entry* entry = &table->elements[i];
-		if(entry == NULL)
+		
+		if(entry->key == NULL)
 			continue;
+
 		Entry* dest = find_entry(entries, cap, entry->key);
 		dest->key = entry->key;
 		dest->value = entry->value;
