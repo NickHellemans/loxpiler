@@ -17,6 +17,7 @@
 static void statement(void);
 static void declaration(void);
 static void expression(void);
+static void named_variable(Token name, bool canAssign);
 
 typedef struct {
 	Token curr;
@@ -536,8 +537,23 @@ static void function(FunctionType type) {
 	}
 }
 
+static void method(void) {
+	//Method name
+	consume(TOKEN_IDENTIFIER, "Expect method name.");
+	uint8_t constant = identifier_constant(&parser.prev);
+
+	//Method parameters and body
+	FunctionType type = TYPE_FUNCTION;
+	function(type);
+
+
+
+	emit_bytes(OP_METHOD, constant);
+}
+
 static void class_declaration(void) {
 	consume(TOKEN_IDENTIFIER, "Expect class name.");
+	Token className = parser.prev;
 	//Add class name to surrounding function constant table as a string
 	uint8_t nameConstant = identifier_constant(&parser.prev);
 	//Bind class object to name
@@ -549,9 +565,16 @@ static void class_declaration(void) {
 	//Refer to the containing class inside the bodies of its own methods
 	define_variable(nameConstant);
 
+	//Before binding methods load class back on top of stack so class is sitting under method's closure
+	named_variable(className, false);
 	//Compile body
 	consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+	while(!check_type(TOKEN_RIGHT_BRACE) && !check_type(TOKEN_EOF)) {
+		method();
+	}
 	consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
+	//Pop class off
+	emit_byte(OP_POP);
 }
 
 static void fun_declaration(void) {

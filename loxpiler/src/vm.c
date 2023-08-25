@@ -184,6 +184,16 @@ static void close_upvalues(Value* last) {
 	}
 }
 
+static void define_method(ObjString* name) {
+	//Closure on top of stack
+	Value method = peek(0);
+	ObjClass* klass = AS_CLASS(peek(1));
+
+	table_set(&klass->methods, name, method);
+	//Pop closure
+	pop_stack();
+}
+
 static bool is_falsey(Value value) {
 	return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
@@ -358,6 +368,8 @@ static InterpretResult run(void) {
 
 				ObjInstance* instance = AS_INSTANCE(peek(1));
 				table_set(&instance->fields, READ_STRING(), peek(0));
+
+				//Setter is an expression that results in the assigned value, so we need to leave that opn the stack
 				Value value = pop_stack();
 				pop_stack();
 				push_stack(value);
@@ -469,6 +481,10 @@ static InterpretResult run(void) {
 				push_stack(OBJ_VAL(new_class(READ_STRING())));
 				break;
 			}
+
+			case OP_METHOD:
+				define_method(READ_STRING());
+				break;
 		}
 	}
 

@@ -28,6 +28,7 @@ ObjClass* new_class(ObjString* name) {
 	//Klass so it is easy to compile for c++ where class is keyword
 	ObjClass* klass = ALLOCATE_OBJ(ObjClass, OBJ_CLASS);
 	klass->name = name;
+	init_table(&klass->methods);
 	return klass;
 }
 
