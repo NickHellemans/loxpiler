@@ -90,16 +90,24 @@ static void blacken_object(Obj* object) {
 	//Mark references based on obj type
 	switch (object->type) {
 
-		case OBJ_CLASS:
+		case OBJ_CLASS: {
 			ObjClass* klass = (ObjClass*)object;
 			mark_object((Obj*)klass->name);
 			mark_table(&klass->methods);
 			break;
+		}
 
 		case OBJ_INSTANCE: {
 			ObjInstance* instance = (ObjInstance*)object;
 			mark_object((Obj*)instance->klass);
 			mark_table(&instance->fields);
+			break;
+		}
+
+		case OBJ_BOUND_METHOD: {
+			ObjBoundMethod* bound = (ObjBoundMethod*)object;
+			mark_value(bound->receiver);
+			mark_object((Obj*)bound->method);
 			break;
 		}
 
@@ -154,6 +162,11 @@ void free_object(Obj* obj) {
 			FREE(ObjInstance, obj);
 			break;
 		}
+
+		case OBJ_BOUND_METHOD:
+			//Does not own it's references so only free itself
+			FREE(ObjBoundMethod, obj);
+			break;
 
 		case OBJ_FUNCTION:
 			ObjFunction* fn = (ObjFunction*)obj;

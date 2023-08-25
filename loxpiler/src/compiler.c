@@ -545,9 +545,6 @@ static void method(void) {
 	//Method parameters and body
 	FunctionType type = TYPE_FUNCTION;
 	function(type);
-
-
-
 	emit_bytes(OP_METHOD, constant);
 }
 

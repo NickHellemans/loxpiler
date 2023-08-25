@@ -10,6 +10,7 @@
 #define IS_CLOSURE(value)      is_obj_type(value, OBJ_CLOSURE)
 #define IS_CLASS(value)        is_obj_type(value, OBJ_CLASS)
 #define IS_INSTANCE(value)     is_obj_type(value, OBJ_INSTANCE)
+#define IS_BOUND_METHOD(value) is_obj_type(value, OBJ_BOUND_METHOD)
 #define IS_NATIVE(value)       is_obj_type(value, OBJ_NATIVE)
 #define IS_STRING(value)       is_obj_type(value, OBJ_STRING)
 
@@ -17,6 +18,7 @@
 #define AS_CLOSURE(value)      ((ObjClosure*)AS_OBJ(value))
 #define AS_CLASS(value)        ((ObjClass*)AS_OBJ(value))
 #define AS_INSTANCE(value)     ((ObjInstance*)AS_OBJ(value))
+#define AS_BOUND_METHOD(value) ((ObjBoundMethod*)AS_OBJ(value))
 #define AS_NATIVE(value) \
     (((ObjNative*)AS_OBJ(value))->function)
 #define AS_STRING(value)       ((ObjString*)AS_OBJ(value))
@@ -27,6 +29,7 @@ typedef enum {
 	OBJ_CLOSURE,
 	OBJ_CLASS,
 	OBJ_INSTANCE,
+	OBJ_BOUND_METHOD,
 	OBJ_NATIVE,
 	OBJ_STRING,
 	OBJ_UPVALUE,
@@ -38,7 +41,7 @@ struct Obj {
 	//Mark flag (reachability)
 	bool isMarked;
 	//Linked list of all heap allocated objects
-	Obj* next;
+	struct Obj* next;
 };
 
 typedef struct {
@@ -77,6 +80,13 @@ typedef struct {
 	Table fields;
 } ObjInstance;
 
+typedef struct {
+	Obj obj;
+	//Track instance method was called from
+	Value receiver;
+	ObjClosure* method;
+} ObjBoundMethod;
+
 //Builtin fn
 typedef Value(*NativeFn)(int argCount, Value* args);
 
@@ -97,6 +107,7 @@ struct ObjString {
 void print_object(Value value);
 ObjClass* new_class(ObjString* name);
 ObjInstance* new_instance(ObjClass* klass);
+ObjBoundMethod* new_bound_method(Value receiver, ObjClosure* method);
 ObjFunction* new_function(void);
 ObjClosure* new_closure(ObjFunction* function);
 ObjNative* new_native(NativeFn function);

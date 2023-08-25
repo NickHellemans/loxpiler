@@ -39,6 +39,13 @@ ObjInstance* new_instance(ObjClass* klass) {
 	return instance;
 }
 
+ObjBoundMethod* new_bound_method(Value receiver, ObjClosure* method) {
+	ObjBoundMethod* bound = ALLOCATE_OBJ(ObjBoundMethod, OBJ_BOUND_METHOD);
+	bound->receiver = receiver;
+	bound->method = method;
+	return bound;
+}
+
 ObjFunction* new_function(void) {
 	ObjFunction* function = ALLOCATE_OBJ(ObjFunction, OBJ_FUNCTION);
 	function->arity = 0;
@@ -102,6 +109,10 @@ void print_object(Value value) {
 		case OBJ_INSTANCE:
 			printf("%s instance",
 				AS_INSTANCE(value)->klass->name->chars);
+			break;
+
+		case OBJ_BOUND_METHOD:
+			print_function(AS_BOUND_METHOD(value)->method->function);
 			break;
 
 		case OBJ_FUNCTION:
