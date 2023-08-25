@@ -95,6 +95,13 @@ static void blacken_object(Obj* object) {
 			mark_object((Obj*)klass->name);
 			break;
 
+		case OBJ_INSTANCE: {
+			ObjInstance* instance = (ObjInstance*)object;
+			mark_object((Obj*)instance->klass);
+			mark_table(&instance->fields);
+			break;
+		}
+
 		case OBJ_CLOSURE: {
 			ObjClosure* closure = (ObjClosure*)object;
 			mark_object((Obj*)closure->function);
@@ -132,6 +139,16 @@ void free_object(Obj* obj) {
 
 		case OBJ_CLASS: {
 			FREE(ObjClass, obj);
+			break;
+		}
+
+		case OBJ_INSTANCE: {
+			ObjInstance* instance = (ObjInstance*)obj;
+			//Only free table and not the entries in table
+			//Might be other references to those objects
+			//GC will take care of those
+			free_table(&instance->fields);
+			FREE(ObjInstance, obj);
 			break;
 		}
 
