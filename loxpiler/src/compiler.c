@@ -94,6 +94,9 @@ static ParseRule* get_rule(TokenType type);
 Parser parser;
 Compiler* current = NULL;
 
+//Global var to check whether we are currently in a class declaration
+//Can be nested (like a class declaration in a method from other class)
+//Implicit linked stack
 ClassCompiler* currentClass = NULL;
 
 Chunk* compilingChunk;
@@ -202,10 +205,12 @@ static int emit_jump(uint8_t instruction) {
 }
 
 static void emit_return(void) {
+	//Init function needs to return created instance which lives in slot 0 as a local var
 	if (current->type == TYPE_INITIALIZER) {
 		emit_bytes(OP_GET_LOCAL, 0);
 	}
 	else {
+		//Implicit return nil
 		emit_byte(OP_NIL);
 	}
 	emit_byte(OP_RETURN);
@@ -255,7 +260,7 @@ static void init_compiler(Compiler* compiler, FunctionType type) {
 	}
 
 	//Claim first stack slot of locals for internal use
-	//For fn calls that slot holds the function being called
+	//For fn calls that slot will hold the function being called
 	//Empty name so user cannot write an identifier that refers to it
 	//For method calls we store the receiver in the first slot
 	Local* local = &current->locals[current->localCount++];
@@ -560,12 +565,18 @@ static void function(FunctionType type) {
 }
 
 static void method(void) {
-	//Method name
+	//Get method name
 	consume(TOKEN_IDENTIFIER, "Expect method name.");
+	//Add to constant table and get index
 	uint8_t constant = identifier_constant(&parser.prev);
 
-	//Method parameters and body
+	//Compiles method parameter list and function body
+	//Emits code to create a closure and leave it on top of stack
+	//At runtime the vm will find the function here
 	FunctionType type = TYPE_METHOD;
+
+	//Check for initializer so we can emit different bytecode to return the instance itself instead of an implicit nil
+	//Initializer functions always need to return the instance they created regardless whatever user put as return value
 	if (parser.prev.length == 4 &&
 		memcmp(parser.prev.start, "init", 4) == 0) {
 		type = TYPE_INITIALIZER;
@@ -577,6 +588,7 @@ static void method(void) {
 
 static void class_declaration(void) {
 	consume(TOKEN_IDENTIFIER, "Expect class name.");
+	//Class to bind methods to
 	Token className = parser.prev;
 	//Add class name to surrounding function constant table as a string
 	uint8_t nameConstant = identifier_constant(&parser.prev);
@@ -589,21 +601,30 @@ static void class_declaration(void) {
 	//Refer to the containing class inside the bodies of its own methods
 	define_variable(nameConstant);
 
+	//Push ClassCompiler on linked list stack to declare we are in a class declaration
 	ClassCompiler classCompiler;
 	classCompiler.enclosing = currentClass;
 	currentClass = &classCompiler;
 
-	//Before binding methods load class back on top of stack so class is sitting under method's closure
+	//Before binding methods load class back on top of stack so class is sitting under method's closure so we know what class to add method to by looking up it's name
 	named_variable(className, false);
 	//Compile body
+	//Only consists of methods to parse
+	//Can have any number of methods
+	//Runtime needs to bind them all
+	//Thats a lot to fit in 1 instruction
+	//Instead we generate a series of instructions
+	//For each method emit an instruction to add the single method to the class
+	//Need 3 things to define a method: class, name and closure
 	consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
 	while(!check_type(TOKEN_RIGHT_BRACE) && !check_type(TOKEN_EOF)) {
 		method();
 	}
 	consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
-	//Pop class off
+	//Pop class off when we don't need it anymore (after method parsing)
 	emit_byte(OP_POP);
 
+	//Restore to the enclosing class (if any) after compiling the class
 	currentClass = currentClass->enclosing;
 }
 
@@ -742,6 +763,7 @@ static void return_statement(void) {
 	if(match(TOKEN_SEMICOLON)) {
 		emit_return();
 	} else {
+		//Init method returns the instance it created, so can't return something else
 		if (current->type == TYPE_INITIALIZER) {
 			error("Can't return a value from an initializer.");
 		}
@@ -907,11 +929,16 @@ static void variable(bool canAssign) {
 
 static void this_(bool canAssign) {
 
+	//To check whether we are in a class declaration and therefore in a method where we can use 'this' we check currentClass var
 	if (currentClass == NULL) {
 		error("Can't use 'this' outside of a class.");
 		return;
 	}
 	//Treat 'this' as a lexical scoped var name access
+	//Token this has just been consumed and is stored in prev
+	//Call variable fn to compile identifier expression as var access
+	//variable will look for a local with 'this' as name
+	//Cant assign to this so pass false
 	variable(false);
 }
 
@@ -975,8 +1002,15 @@ static void dot(bool canAssign) {
 		expression();
 		emit_bytes(OP_SET_PROPERTY, name);
 	}
+	//Optimize method calls
+	//Instead of treating every method call as 2 separate operations (access method + calling the result) which results in lots of heap allocations
+	//If we see a dotted property access followed by a ( it is most likely a method call
+	//Emit special instruction to perform optimized method call
 	else if (match(TOKEN_LEFT_PAREN)) {
+		//Compile the arguments directly after compiler parsed the property name
 		uint8_t argCount = argument_list();
+		//2 operands, name + arg count
+		//It combines OP_GET_PROPERTY + OP_CALL
 		emit_bytes(OP_INVOKE, name);
 		emit_byte(argCount);
 	}

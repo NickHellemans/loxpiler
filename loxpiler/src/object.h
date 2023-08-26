@@ -80,9 +80,11 @@ typedef struct {
 	Table fields;
 } ObjInstance;
 
+//Wrap closure for method access together with it's receiver (the instance it was called from)
 typedef struct {
 	Obj obj;
 	//Track instance method was called from
+	//Will be a ObjInstance but store as value to not have to cast to value for some functions
 	Value receiver;
 	ObjClosure* method;
 } ObjBoundMethod;

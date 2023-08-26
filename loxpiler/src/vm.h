@@ -35,6 +35,7 @@ typedef struct {
 	Table globals;
 	//Interned strings
 	Table strings;
+	//Store an object for "init" string to speed up instance constructing because for calling the initializer  the runtime looks it up by name
 	ObjString* initString;
 	//Open upvalues still on stack
 	ObjUpvalue* openUpvalues;

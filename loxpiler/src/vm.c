@@ -74,6 +74,7 @@ void init_vm(void) {
 	init_table(&vm.globals);
 	init_table(&vm.strings);
 
+	//Initialize to null so if copy_string triggers a GC it does not read into uninitialized memory
 	vm.initString = NULL;
 	vm.initString = copy_string("init", 4);
 
@@ -83,6 +84,7 @@ void init_vm(void) {
 void free_vm(void) {
 	free_table(&vm.globals);
 	free_table(&vm.strings);
+	//Clear pointer since next line will free it
 	vm.initString = NULL;
 	free_objects();
 }
@@ -129,18 +131,22 @@ static bool call_value(Value callee, int argCount) {
 
 			case OBJ_BOUND_METHOD: {
 				ObjBoundMethod* bound = AS_BOUND_METHOD(callee);
+				//Put receiver in the expected first slot
+				//So when 'this' gets accessed in method the method will look for it in this spot
 				vm.stackTop[-argCount - 1] = bound->receiver;
 				return call(bound->method, argCount);
 			}
 
 			case OBJ_CLASS: {
+				//Init class instance by using init method if there is one else return uninitialized instance
 				ObjClass* klass = AS_CLASS(callee);
 				vm.stackTop[-argCount - 1] = OBJ_VAL(new_instance(klass));
-				Value initializer;
 
+				Value initializer;
 				if (table_get(&klass->methods, vm.initString, &initializer)) {
 					return call(AS_CLOSURE(initializer), argCount);
 				} else if (argCount != 0) {
+					//If there is no init method it makes no sense to pass arguments when creating an instance
 					runtime_error("Expected 0 arguments but got %d.",argCount);
 					return false;
 				}
@@ -168,17 +174,23 @@ static bool call_value(Value callee, int argCount) {
 }
 
 static bool invoke_from_class(ObjClass* klass, ObjString* name, int argCount) {
+	//Get method from class by name and call it
 	Value method;
 	if (!table_get(&klass->methods, name, &method)) {
 		runtime_error("Undefined property '%s'.", name->chars);
 		return false;
 	}
+	//Push call onto call frame
+	//No need to create a BoundMethod or juggle stack
+	//Everything is already where it should be
 	return call(AS_CLOSURE(method), argCount);
 }
 
 static bool invoke(ObjString* name, int argCount) {
+	//Get instance method is called on
 	Value receiver = peek(argCount);
 
+	//Check if obj is an instance
 	if (!IS_INSTANCE(receiver)) {
 		runtime_error("Only instances have methods.");
 		return false;
@@ -186,25 +198,32 @@ static bool invoke(ObjString* name, int argCount) {
 
 	ObjInstance* instance = AS_INSTANCE(receiver);
 
+	//Before looking up a method on the instance's class we look for a field with the same name, if we find a field we store it on the stack in place of the receiver, under the arg list so it ends up on right spot if it is a callable value
+
+	//For example fields that return a callable value
+	//If not callable 'call_value' will report an error
 	Value value;
 	if (table_get(&instance->fields, name, &value)) {
 		vm.stackTop[-argCount - 1] = value;
 		return call_value(value, argCount);
 	}
 
+	//Look for method by name
 	return invoke_from_class(instance->klass, name, argCount);
 }
 
 static bool bind_method(ObjClass* klass, ObjString* name) {
+	//Look for method with given name in given class
 	Value method;
 	if(!table_get(&klass->methods, name, &method)) {
 		runtime_error("Undefined property '%s'.", name->chars);
 		return false;
 	}
+	//Wrap method in BoundMethod together with receiver
 	//The instance which is the receiver is on top of stack
 	ObjBoundMethod* bound = new_bound_method(peek(0), AS_CLOSURE(method));
 
-	//Pop receiver and push bound method
+	//Replace values on stack: pop receiver and push bound method
 	pop_stack();
 	push_stack(OBJ_VAL(bound));
 	return true;
@@ -249,8 +268,10 @@ static void close_upvalues(Value* last) {
 static void define_method(ObjString* name) {
 	//Closure on top of stack
 	Value method = peek(0);
+	//Class sits after the closure
 	ObjClass* klass = AS_CLASS(peek(1));
 
+	//Set method in the table of specified class
 	table_set(&klass->methods, name, method);
 	//Pop closure
 	pop_stack();
@@ -411,6 +432,10 @@ static InterpretResult run(void) {
 				ObjInstance* instance = AS_INSTANCE(peek(0));
 				ObjString* name = READ_STRING();
 
+				//Find field or method with given name
+				//Replace top of stack with the accessed property
+
+				//Try field first
 				Value value;
 				if (table_get(&instance->fields, name, &value)) {
 					pop_stack();
@@ -418,6 +443,7 @@ static InterpretResult run(void) {
 					break;
 				}
 
+				//Try method if field fails
 				if(!bind_method(instance->klass, name)) {
 					return INTERPRET_RUNTIME_ERROR;
 				}
@@ -520,11 +546,14 @@ static InterpretResult run(void) {
 			}
 
 			case OP_INVOKE: {
+				//Get method name and arg count
 				ObjString* method = READ_STRING();
 				int argCount = READ_BYTE();
+				
 				if (!invoke(method, argCount)) {
 					return INTERPRET_RUNTIME_ERROR;
 				}
+				//if success there is new call frame on stack so refresh cached frame
 				frame = &vm.frames[vm.frameCount - 1];
 				break;
 			}
