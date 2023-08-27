@@ -17,7 +17,9 @@
 static void statement(void);
 static void declaration(void);
 static void expression(void);
+static void variable(bool canAssign);
 static void named_variable(Token name, bool canAssign);
+static Token synthetic_token(const char* text);
 
 typedef struct {
 	Token curr;
@@ -86,6 +88,7 @@ typedef struct Compiler{
 
 typedef struct ClassCompiler {
 	struct ClassCompiler* enclosing;
+	bool hasSuperclass;
 } ClassCompiler;
 
 static ParseRule* get_rule(TokenType type);
@@ -603,8 +606,26 @@ static void class_declaration(void) {
 
 	//Push ClassCompiler on linked list stack to declare we are in a class declaration
 	ClassCompiler classCompiler;
+	classCompiler.hasSuperclass = false;
 	classCompiler.enclosing = currentClass;
 	currentClass = &classCompiler;
+
+
+	//Check for superclass
+	if(match(TOKEN_LESS)) {
+		consume(TOKEN_IDENTIFIER, "Expect superclass name");
+		variable(false);
+		if(identifiers_equal(&className, &parser.prev)) {
+			error("A class can't inherit from itself");
+		}
+
+		begin_scope();
+		add_local(synthetic_token("super"));
+		define_variable(0);
+		named_variable(className, false);
+		emit_byte(OP_INHERIT);
+		classCompiler.hasSuperclass = true;
+	}
 
 	//Before binding methods load class back on top of stack so class is sitting under method's closure so we know what class to add method to by looking up it's name
 	named_variable(className, false);
@@ -623,6 +644,10 @@ static void class_declaration(void) {
 	consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
 	//Pop class off when we don't need it anymore (after method parsing)
 	emit_byte(OP_POP);
+
+	if(classCompiler.hasSuperclass) {
+		end_scope();
+	}
 
 	//Restore to the enclosing class (if any) after compiling the class
 	currentClass = currentClass->enclosing;
@@ -925,6 +950,13 @@ static void named_variable(Token name, bool canAssign) {
 
 static void variable(bool canAssign) {
 	named_variable(parser.prev, canAssign);
+}
+
+static Token synthetic_token(const char* text) {
+	Token token;
+	token.start = text;
+	token.length = (int)strlen(text);
+	return token;
 }
 
 static void this_(bool canAssign) {
