@@ -959,6 +959,30 @@ static Token synthetic_token(const char* text) {
 	return token;
 }
 
+static void super_(bool canAssign) {
+
+	if(currentClass == NULL) {
+		error("Can't use 'super' outside of a class.");
+	} else if (!currentClass->hasSuperclass) {
+		error("Can't use 'super' in a class with no superclass.");
+	}
+
+	consume(TOKEN_DOT, "Expect '.' after 'super'.");
+	consume(TOKEN_IDENTIFIER, "Expect superclass method name.");
+	uint8_t name = identifier_constant(&parser.prev);
+	named_variable(synthetic_token("this"), false);
+
+	if(match(TOKEN_LEFT_PAREN)) {
+		uint8_t argCount = argument_list();
+		named_variable(synthetic_token("super"), false);
+		emit_bytes(OP_SUPER_INVOKE, name);
+		emit_byte(argCount);
+	} else {
+		named_variable(synthetic_token("super"), false);
+		emit_bytes(OP_GET_SUPER, name);
+	}
+}
+
 static void this_(bool canAssign) {
 
 	//To check whether we are in a class declaration and therefore in a method where we can use 'this' we check currentClass var
@@ -1095,7 +1119,7 @@ ParseRule rules[] = {
   [TOKEN_OR] =				{NULL,     or_,    PREC_OR},
   [TOKEN_PRINT] =			{NULL,     NULL,   PREC_NONE},
   [TOKEN_RETURN] =			{NULL,     NULL,   PREC_NONE},
-  [TOKEN_SUPER] =			{NULL,     NULL,   PREC_NONE},
+  [TOKEN_SUPER] =			{super_,   NULL,   PREC_NONE},
   [TOKEN_THIS] =			{this_,    NULL,   PREC_NONE},
   [TOKEN_TRUE] =			{literal,     NULL,   PREC_NONE},
   [TOKEN_VAR] =				{NULL,     NULL,   PREC_NONE},

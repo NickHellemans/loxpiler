@@ -467,6 +467,17 @@ static InterpretResult run(void) {
 				break;
 			}
 
+			case OP_GET_SUPER: {
+				
+				ObjString* name = READ_STRING();
+				ObjClass* superclass = AS_CLASS(pop_stack());
+
+				if(!bind_method(superclass, name)) {
+					return INTERPRET_RUNTIME_ERROR;
+				}
+				break;
+			}
+
 			case OP_EQUAL: {
 				Value b = pop_stack();
 				Value a = pop_stack();
@@ -554,6 +565,17 @@ static InterpretResult run(void) {
 					return INTERPRET_RUNTIME_ERROR;
 				}
 				//if success there is new call frame on stack so refresh cached frame
+				frame = &vm.frames[vm.frameCount - 1];
+				break;
+			}
+
+			case OP_SUPER_INVOKE: {
+				ObjString* method = READ_STRING();
+				int argCount = READ_BYTE();
+				ObjClass* superclass = AS_CLASS(pop_stack());
+				if (!invoke_from_class(superclass, method, argCount)) {
+					return INTERPRET_RUNTIME_ERROR;
+				}
 				frame = &vm.frames[vm.frameCount - 1];
 				break;
 			}
