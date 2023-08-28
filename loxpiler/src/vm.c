@@ -468,13 +468,18 @@ static InterpretResult run(void) {
 			}
 
 			case OP_GET_SUPER: {
-				
-				ObjString* name = READ_STRING();
-				ObjClass* superclass = AS_CLASS(pop_stack());
 
+				//Get method name for superclass
+				ObjString* name = READ_STRING();
+				//Get superclass and pop it from stack to leave instance at top of stack
+				//When bind_method succeeds it pops off the instance and pushes the BoundMethod
+				ObjClass* superclass = AS_CLASS(pop_stack());
+				//Pass superclass and method name to create a BoundMethod to bundle closure and instance
 				if(!bind_method(superclass, name)) {
 					return INTERPRET_RUNTIME_ERROR;
 				}
+				//This heaps allocate a BoundMethod Obj every time, most of the time we want to invoke a supercall and the next instruction will be a OP_CALL that will unpack the BoundMethod and discard it
+				//Compiler can tell if we immediately invoke it or not so we optimize supercalls to directly invoke it
 				break;
 			}
 
@@ -570,12 +575,17 @@ static InterpretResult run(void) {
 			}
 
 			case OP_SUPER_INVOKE: {
+				//Get method name and arg count
 				ObjString* method = READ_STRING();
 				int argCount = READ_BYTE();
+				//Get superclass from stack and pop it off so stack is set up right for a method call
 				ObjClass* superclass = AS_CLASS(pop_stack());
+				//Look up given function by name and create a call for it
+				//Pushes new frame on callstack if success 
 				if (!invoke_from_class(superclass, method, argCount)) {
 					return INTERPRET_RUNTIME_ERROR;
 				}
+				//Refresh frame
 				frame = &vm.frames[vm.frameCount - 1];
 				break;
 			}
@@ -609,13 +619,17 @@ static InterpretResult run(void) {
 			}
 
 			case OP_INHERIT:
+				//Get superclass and check if it is a class
 				Value superclass = peek(1);
 				if(!IS_CLASS(superclass)) {
 					runtime_error("Super class must be a class.");
 					return INTERPRET_RUNTIME_ERROR;
 				}
 				ObjClass* subclass = AS_CLASS(peek(0));
+				//Copy over all methods from super class to subclass
+				//Table from subclass is empty so any method the subclass overrides will overwrite these entries
 				table_add_all(&AS_CLASS(superclass)->methods, &subclass->methods);
+				//Pop subclass
 				pop_stack();
 				break;
 

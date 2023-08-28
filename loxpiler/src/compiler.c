@@ -611,18 +611,27 @@ static void class_declaration(void) {
 	currentClass = &classCompiler;
 
 
-	//Check for superclass
+	//Check for superclass after compiling class name
 	if(match(TOKEN_LESS)) {
 		consume(TOKEN_IDENTIFIER, "Expect superclass name");
+		//Treat prev consumed token as var ref and load value on stack
+		//Look up superclass by name and push onto stack
 		variable(false);
+
+		//Class can't be it's own superclass
 		if(identifiers_equal(&className, &parser.prev)) {
 			error("A class can't inherit from itself");
 		}
 
+		//Use a local scope to store superclass
+		//Makes sure that 2 classes declared in same scope have a different local scope to store superclass since we always name it 'super'
 		begin_scope();
+		//Create token since we don't have one after lexing
 		add_local(synthetic_token("super"));
 		define_variable(0);
+		//Load subclass on stack
 		named_variable(className, false);
+		//Wire up superclass to subclass
 		emit_byte(OP_INHERIT);
 		classCompiler.hasSuperclass = true;
 	}
@@ -645,6 +654,8 @@ static void class_declaration(void) {
 	//Pop class off when we don't need it anymore (after method parsing)
 	emit_byte(OP_POP);
 
+	//Close local scope to store super class after all methods have been compiled
+	//This way every method has access to the superclass
 	if(classCompiler.hasSuperclass) {
 		end_scope();
 	}
@@ -961,23 +972,34 @@ static Token synthetic_token(const char* text) {
 
 static void super_(bool canAssign) {
 
+	//Check if super is called correctly
 	if(currentClass == NULL) {
 		error("Can't use 'super' outside of a class.");
 	} else if (!currentClass->hasSuperclass) {
 		error("Can't use 'super' in a class with no superclass.");
 	}
 
+	//Super is not a standalone expression: need [dot] [method] to follow it for correct use
+	//But no need to call it immediately, can store ref
 	consume(TOKEN_DOT, "Expect '.' after 'super'.");
 	consume(TOKEN_IDENTIFIER, "Expect superclass method name.");
+	//Store method name in constant table to look up at runtime
 	uint8_t name = identifier_constant(&parser.prev);
+	//Need receiver to call super on current instance
 	named_variable(synthetic_token("this"), false);
 
+	//Check to see if supercall gets invoked immediately
+	//Then we can optimize and directly call it with different instructions and compile args
 	if(match(TOKEN_LEFT_PAREN)) {
+		//Compile arg list
 		uint8_t argCount = argument_list();
+		//Push superclass on stack
 		named_variable(synthetic_token("super"), false);
+		//2 operands: method name and arg count
 		emit_bytes(OP_SUPER_INVOKE, name);
 		emit_byte(argCount);
 	} else {
+		//Supercall is just an access
 		named_variable(synthetic_token("super"), false);
 		emit_bytes(OP_GET_SUPER, name);
 	}
