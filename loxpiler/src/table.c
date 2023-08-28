@@ -21,7 +21,23 @@ void free_table(Table* table) {
 }
 
 Entry* find_entry(Entry* entries, int cap, ObjString* key) {
-	uint32_t index = key->hash % cap;
+	//Modulo is very slow
+	//We can take advantage of the fact that we know more about our problem than the CPU does
+	//We use modulo here to take the hash and wrap it to fit inside the table bounds
+	//The array size always start at 8 and grows by a factor of 2
+	//We can use bit masking  to calculate the remainder of a power of 2
+	//In binary the remainder is equal to the the dividend with the highest 2 bits shaved off
+	//Those bits are the bits at or left of the divisor's single 1 bit
+	//Example:
+	//229 % 64 = 37
+	//11100101 % 01000000 = 00100101
+	//Instead we can use AND with the divisor - 1
+	//Subtracting 1 from a power of 2, gives u a series of 1 bits
+	//That is exactly the mask we need in order to strip out those 2 leftmost bits
+	//229 & 63 = 37
+	//11100101 & 00111111 = 00100101
+	//uint32_t index = key->hash % cap;
+	uint32_t index = key->hash & (cap - 1);
 	//Check for tombstones while linear probing to not miss any possible entries
 
 	Entry* tombstone = NULL;
@@ -47,7 +63,8 @@ Entry* find_entry(Entry* entries, int cap, ObjString* key) {
 			return entry;
 		
 		//Linear probing to handle collisions
-		index = (index + 1) % cap;
+		//index = (index + 1) % cap;
+		index = (index + 1) & (cap - 1);
 	}
 }
 
@@ -141,7 +158,8 @@ void table_add_all(Table* from, Table* to) {
 ObjString* table_find_string(Table* table, const char* chars, int length, uint32_t hash) {
 	if (table->size == 0) return NULL;
 
-	uint32_t index = hash % table->cap;
+	//uint32_t index = hash % table->cap;
+	uint32_t index = hash & (table->cap - 1);
 	for(;;) {
 		Entry* entry = &table->elements[index];
 		if(entry->key == NULL) {
@@ -152,7 +170,8 @@ ObjString* table_find_string(Table* table, const char* chars, int length, uint32
 			//Found it
 			return entry->key;
 		}
-		index = (index + 1 ) % table->cap;
+		//index = (index + 1 ) % table->cap;
+		index = (index + 1) & (table->cap - 1);
 	}
 }
 
